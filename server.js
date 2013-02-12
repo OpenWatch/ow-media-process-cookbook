@@ -5,12 +5,27 @@ glob = require('glob'),
 fs = require('fs'),
 exec = require('child_process').exec,
 app = express.createServer(),
+knox = require('knox'),
+MultiPartUpload = require('knox-mpu'),
 jobs = kue.createQueue(); // create our job queue
 
-app.listen(3000);
-app.use(kue.app);
-console.log('UI started on port 3000');
+// AWS Settings
+var aws_bucket = 'openwatch-capture';
+var aws_key = process.env.AWS_KEY;
+var aws_secret = process.env.AWS_SECRET;
+// File's home
 var glob_path_prefix = "/internment/";
+
+// Knox S3 Client
+var client = knox.createClient({
+    key: aws_key,
+    secret: aws_secret,
+    bucket: aws_bucket
+});
+
+app.listen(5001);
+app.use(kue.app);
+console.log('UI started on port 5001');
 
 jobs.process('concatenate', 4, function(job, done) {
   var uuid = job.data.uuid;
@@ -58,10 +73,8 @@ jobs.process('concatenate', 4, function(job, done) {
           exec(cat_command, function (error, stdout, stderr) {
               if (error !== null) {
                 job.log('Cat failed. What should we do?\n\n' + error);
-                done();
-              } else {
-                done();
               }
+              done();
           });
         }
       });
@@ -103,27 +116,59 @@ jobs.process('thumbnail', 4, function(job, done) {
   var source_path = recording_directory + '/full.mp4';
   var proc = new ffmpeg({ source: source_path })
   .withSize('300x300')
-  .takeScreenshots(1, recording_directory, function(err, filenames) {
-    job.log('screenshots were saved');
-    done();
+  .takeScreenshots({
+      count: 1,
+      timemarks: ['50%'],
+      filename: 'thumb'
+    }, recording_directory, function(err, filenames) {
+      job.log('screenshots were saved');
+      done();
   });
 });
 
-app.get('/process/:uuid', function (req, res) {
+app.get('/process_lq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
-  console.log('starting ' + uuid);
-  res.send('Starting job...');
-  start_concatenate_job(uuid);
+  var up_token = req.params.up_token;
+  console.log('starting lq ' + uuid);
+  res.send('Starting lq job...');
+  start_concatenate_job(uuid, up_token);
 });
 
-function start_concatenate_job(uuid) {
+app.get('/process_hq/:up_token/:uuid', function (req, res) {
+  var uuid = req.params.uuid;
+  var up_token = req.params.up_token;
+  console.log('starting hq ' + uuid);
+  res.send('Starting hq job...');
+  var recording_directory = directory_for_uuid(uuid);
+  var source_path = recording_directory + '/hq/hq.mp4';
+  //start_concatenate_job(uuid);
+  var hq_upload = new MultiPartUpload(
+          {
+              client: client,
+              objectName: uuid + '/hq.mp4', // Amazon S3 path
+              file: source_path       // Local path
+          },
+          function(err, res) {
+            console.log('HQ upload response:');
+            console.log(res);
+          // On Successful upload, res will look like:
+          //{ Location: 'https://openwatch-capture.s3.amazonaws.com/ore%2Ftest.mp4',
+    //  Bucket: 'openwatch-capture',
+    //  Key: 'jewels/<uuid>/hq.mp4',
+    //  ETag: '"745a409f6f05ef102a5409a3d306d030-1"',
+    //  size: 5222664 }
+          }
+  );
+});
+
+function start_concatenate_job(uuid, up_token) {
   var job = jobs.create('concatenate', {
         title: uuid,
         uuid: uuid
     }).save();
 
   job.on('complete', function(){
-    start_convert_job(uuid);
+    start_convert_job(uuid, up_token);
   }).on('failed', function(){
     console.log("Job failed");
   }).on('progress', function(progress){
@@ -131,13 +176,13 @@ function start_concatenate_job(uuid) {
   });
 }
 
-function start_convert_job(uuid) {
+function start_convert_job(uuid, up_token) {
   var convert_job = jobs.create('convert', {
       title: uuid,
       uuid: uuid
   }).save();
   convert_job.on('complete', function(){
-    start_thumbnail_job(uuid);
+    start_thumbnail_job(uuid, up_token);
   }).on('failed', function(){
     console.log("convert Job failed");
   }).on('progress', function(progress){
@@ -145,7 +190,7 @@ function start_convert_job(uuid) {
   });
 }
 
-function start_thumbnail_job(uuid) {
+function start_thumbnail_job(uuid, up_token) {
   var job = jobs.create('thumbnail', {
         title: uuid,
         uuid: uuid
@@ -153,20 +198,60 @@ function start_thumbnail_job(uuid) {
 
   job.on('complete', function(){
     console.log("Thumbnailing complete.");
-    // 3: Tell the web server we've stopped processing!
-    /*callEndpoint('end_processing',{
-      public_upload_token: up_token,
-      recording_id: uid,
-      recording_type: 'video',
-      error_message: error,
-      path: config.bucketDomain + '/public/uploads/' + uid + '/full.mp4',
-      thumb: config.bucketDomain + '/public/uploads/' + uid + '/thumb.png'
-    });*/
+    upload_lq_to_s3(uuid, up_token);
   }).on('failed', function(){
     console.log("thumbnailing Job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
+}
+
+function upload_lq_to_s3(uuid, up_token) {
+  var recording_directory = directory_for_uuid(uuid);
+  var lq_source_path = recording_directory + '/full.mp4';
+  var thumb_source_path = recording_directory + '/thumb.jpg';
+  var lq_s3_location = '';
+  var thumb_s3_location = '';
+  var lq_upload = new MultiPartUpload(
+      {
+          client: client,
+          objectName: uuid + '/lq.mp4', // Amazon S3 path
+          file: lq_source_path
+      },
+      function(err, res) {
+        console.log('LQ upload response:');
+        console.log(res);
+        var response = JSON.parse(res);
+        lq_s3_location = response['Location'];
+
+        var thumb_upload = new MultiPartUpload(
+            {
+                client: client,
+                objectName: uuid + '/thumb.jpg', // Amazon S3 path
+                file: thumb_source_path
+            },
+            function(err, res) {
+              console.log('LQ thumb response:');
+              console.log(res);
+              var response = JSON.parse(res);
+              thumb_s3_location = response['Location'];
+              console.log('lq: ' + lq_s3_location + "\nthumb: " + thumb_s3_location);
+              /*
+              callEndpoint('end_processing', {
+                public_upload_token: up_token,
+                recording_id: uuid,
+                recording_type: 'video',
+                error_message: error,
+                path: lq_s3_location,
+                thumb: thumb_s3_location
+              });
+              */
+            }
+        );
+      }
+  );
+
+
 }
 
 function directory_for_uuid(uid) {
