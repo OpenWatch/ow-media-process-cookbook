@@ -13,21 +13,18 @@ console.log('UI started on port 3000');
 var glob_path_prefix = "/internment/";
 
 jobs.process('concatenate', 4, function(job, done) {
-  var uid = job.data.uuid;
-  console.log('Starting ' + uid);
-  job.log('Starting ' + uid);
-  var recording_directory = "/internment/" + uid;
+  var uuid = job.data.uuid;
+  job.log('Starting ' + uuid);
+  var recording_directory = directory_for_uuid(uuid);
   glob(recording_directory + "/*.mp4", {nosort: false}, function (err, files) {
     files.sort(naturalSort);
     all_files = files;
 
     if(err){
-      console.log("Error globbing!");
-      job.log("Something went wrong!");
+      job.log("Error globbing!");
       job.log(err);
-      stitch_fail(uid, err);
+      stitch_fail(uuid, err);
     }
-    console.log("Found files: " + files.length);
     job.log("Found files: " + files.length);
     job.data.file_count = files.length;
     job.data.completed_files_count = 0;
@@ -40,7 +37,7 @@ jobs.process('concatenate', 4, function(job, done) {
     // Convert files to MPEG-TS format
     for ( var i = 0, l = files.length; i < l; i++) {
       var input_file = files[i];
-      console.log("starting ffmpeg for: " + input_file);
+      job.log("starting ffmpeg for: " + input_file);
       out_file = input_file.replace('mp4', 'ts');
       out_file_concat += ' ' + out_file + ' ';
       var proc = new ffmpeg({ source: input_file, priority: 10 })
@@ -56,12 +53,11 @@ jobs.process('concatenate', 4, function(job, done) {
         job.save();
         // If all files have been converted, concatenate them
         if (completed_files_count == files.length) {
-          console.log('All done!');
           var cat_command = 'cat {0} > {1}/full.ts'.format(out_file_concat, recording_directory);
-          console.log('Meow: ' + cat_command);
+          job.log('Meow: ' + cat_command);
           exec(cat_command, function (error, stdout, stderr) {
               if (error !== null) {
-                console.log('Cat failed. What should we do?\n\n' + error);
+                job.log('Cat failed. What should we do?\n\n' + error);
                 done();
               } else {
                 done();
@@ -74,10 +70,9 @@ jobs.process('concatenate', 4, function(job, done) {
 });
 
 jobs.process('convert', 4, function(job, done) {
-  var uid = job.data.uuid;
-  console.log('Starting ' + uid);
-  job.log('Starting ' + uid);
-  var recording_directory = "/internment/" + uid;
+  var uuid = job.data.uuid;
+  job.log('Starting ' + uuid);
+  var recording_directory = directory_for_uuid(uuid);
   var full_ts = recording_directory + '/full.ts';
   var out_file = recording_directory + '/full.mp4';
   var proc = new ffmpeg({ source: full_ts, priority: 10 })
@@ -86,7 +81,6 @@ jobs.process('convert', 4, function(job, done) {
   .addOption('-absf', 'aac_adtstoasc')
   .toFormat('mp4')
   .onProgress(function(progress) {
-    console.log(progress);
     job.progress(progress.percent, 100);
   })
   .saveToFile(out_file, function(stdout, stderr) {
@@ -96,109 +90,87 @@ jobs.process('convert', 4, function(job, done) {
       for ( var i = 0, l = files.length; i < l; i++) {
         file = files[i];
         fs.unlink(file);
-        console.log('unlinking ' + file);
       }
+      done();
     });
   });
-
 });
 
-app.get('/process/:uid', function (req, res) {
-  var uuid = req.params.uid;
+jobs.process('thumbnail', 4, function(job, done) {
+  var uuid = job.data.uuid;
+  job.log('Starting thumbnail for ' + uuid);
+  var recording_directory = directory_for_uuid(uuid);
+  var source_path = recording_directory + '/full.mp4';
+  var proc = new ffmpeg({ source: source_path })
+  .withSize('300x300')
+  .takeScreenshots(1, recording_directory, function(err, filenames) {
+    job.log('screenshots were saved');
+    done();
+  });
+});
+
+app.get('/process/:uuid', function (req, res) {
+  var uuid = req.params.uuid;
   console.log('starting ' + uuid);
+  res.send('Starting job...');
+  start_concatenate_job(uuid);
+});
+
+function start_concatenate_job(uuid) {
   var job = jobs.create('concatenate', {
         title: uuid,
         uuid: uuid
     }).save();
-  res.send('yep');
 
   job.on('complete', function(){
-    var convert_job = jobs.create('convert', {
-        title: uuid,
-        uuid: uuid
-    }).save();
-    convert_job.on('complete', function(){
-      console.log("convert Job complete");
-    }).on('failed', function(){
-      console.log("convert Job failed");
-    }).on('progress', function(progress){
-      console.log('\r  convert job #' + convert_job.id + ' ' + progress + '% complete');
-    });
+    start_convert_job(uuid);
   }).on('failed', function(){
     console.log("Job failed");
   }).on('progress', function(progress){
-    console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
+    //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
-});
+}
 
+function start_convert_job(uuid) {
+  var convert_job = jobs.create('convert', {
+      title: uuid,
+      uuid: uuid
+  }).save();
+  convert_job.on('complete', function(){
+    start_thumbnail_job(uuid);
+  }).on('failed', function(){
+    console.log("convert Job failed");
+  }).on('progress', function(progress){
+    //console.log('\r  convert job #' + convert_job.id + ' ' + progress + '% complete');
+  });
+}
 
-function generate_thumbnail(up_token, uid){
-  var thumb_command = 'ffmpeg -i {0}/full.mp4 -an -ss 00:00:02 -an -r 1 -vframes 1 -y {0}/thumb.png; ffmpeg -i {0}/full.mp4 -an -ss 00:00:02 -an -r 1 -vframes 1 -y -s 300x300 {0}/thumb.png.300x300_q85_crop.jpg;'.format('public/uploads/' + uid);
+function start_thumbnail_job(uuid) {
+  var job = jobs.create('thumbnail', {
+        title: uuid,
+        uuid: uuid
+    }).save();
 
-  console.log("Thumb nailing..");
-  console.log(thumb_command);
-
-  exec(thumb_command, function (error, stdout, stderr) {
-    console.log("thumbnail log: " + stderr);
-    if (error !== null) {
-      console.log('Thumb failed. What should we do?\n\n' + error);
-    }else{
-      console.log("Hooray, we have a thumbnail!");
-    }
-
+  job.on('complete', function(){
+    console.log("Thumbnailing complete.");
     // 3: Tell the web server we've stopped processing!
-    callEndpoint('end_processing',{
+    /*callEndpoint('end_processing',{
       public_upload_token: up_token,
       recording_id: uid,
       recording_type: 'video',
       error_message: error,
       path: config.bucketDomain + '/public/uploads/' + uid + '/full.mp4',
       thumb: config.bucketDomain + '/public/uploads/' + uid + '/thumb.png'
-    });
-
+    });*/
+  }).on('failed', function(){
+    console.log("thumbnailing Job failed");
+  }).on('progress', function(progress){
+    //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
-
 }
 
-function smoosh_files(up_token, uid){
-
-  var all_files;
-  var pieces_tsd = 0;
-  var pieces = 0;
-
-  function concatenate(){
-    pieces_tsd++;
-    if(pieces_tsd != pieces){
-      return;
-    }
-
-    var out_file_concat = '';
-    for(var i = 0, l = all_files.length; i < l; i++){
-      out_file_concat += ' {0} '.format(all_files[i].replace('mp4', 'ts'));
-    }
-
-    var cat_command = 'cat {0} > {1}/full.ts'.format(out_file_concat, 'public/uploads/' + uid);
-    exec(cat_command, function (error, stdout, stderr) {
-        if (error !== null) {
-          console.log('Cat failed. What should we do?\n\n' + error);
-          return;
-        }
-
-        exec(stitch_command, function (error, stdout, stderr) {
-
-          if (error !== null) {
-            console.log('Stitch failed. What should we do?\n\n' + error);
-          }else{
-            console.log("Hooray, files are stitched!");
-          }
-
-          generate_thumbnail(up_token, uid);
-
-        });
-      });
-  }
-
-  
+function directory_for_uuid(uid) {
+  return glob_path_prefix + uid;
 }
 
 /*
