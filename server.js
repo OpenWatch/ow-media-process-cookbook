@@ -9,7 +9,7 @@ app.listen(3000);
 app.use(kue.app);
 console.log('UI started on port 3000');
 
-jobs.process('concatenate', function(job, done) {
+jobs.process('concatenate', 4, function(job, done) {
   var uid = job.data.uuid;
   console.log('Starting ' + uid);
   job.log('Starting ' + uid);
@@ -34,7 +34,7 @@ jobs.process('concatenate', function(job, done) {
       console.log("starting ffmpeg for: " + input_file);
       job.progress(i+1, files.length);
       out_file = input_file.replace('mp4', 'ts');
-      var proc = new ffmpeg({ source: input_file })
+      var proc = new ffmpeg({ source: input_file, priority: 10 })
       .withVideoCodec('copy')
       .withAudioCodec('copy')
       .addOption('-vbsf', 'h264_mp4toannexb')
@@ -50,10 +50,19 @@ jobs.process('concatenate', function(job, done) {
 app.get('/process/:uid', function (req, res) {
   var uuid = req.params.uid;
   console.log('starting ' + uuid);
-  jobs.create('concatenate', {
+  var job = jobs.create('concatenate', {
+        title: uuid,
         uuid: uuid
     }).save();
   res.send('yep');
+
+  job.on('complete', function(){
+    console.log("Job complete");
+  }).on('failed', function(){
+    console.log("Job failed");
+  }).on('progress', function(progress){
+    console.log('\r  job #' + job.id + ' ' + progress + '% complete');
+  });
 });
 
 
