@@ -2,7 +2,7 @@ var kue = require('kue'),
 express = require('express'),
 ffmpeg = require('fluent-ffmpeg'),
 glob = require('glob'),
-app = express(),
+app = express.createServer(),
 jobs = kue.createQueue(); // create our job queue
 
 app.listen(3000);
@@ -10,41 +10,50 @@ app.use(kue.app);
 console.log('UI started on port 3000');
 
 jobs.process('concatenate', function(job, done) {
-  var uid = job.uuid;
-  glob("public/uploads/" + uid + "/*.mp4", {nosort: false}, function (err, files) {
-
+  var uid = job.data.uuid;
+  console.log('Starting ' + uid);
+  job.log('Starting ' + uid);
+  glob("/internment/" + uid + "/*.mp4", {nosort: false}, function (err, files) {
     files.sort(naturalSort);
     all_files = files;
 
     if(err){
-      console.log("Something went wrong!");
-      console.log(err);
+      console.log("Error globbing!");
+      job.log("Something went wrong!");
+      job.log(err);
       stitch_fail(uid, err);
     }
+    console.log("Found files: " + files.length);
+    job.log("Found files: " + files.length);
 
     pieces = files.length;
     var out_file;
     var out_files = [];
     for ( var i = 0, l = files.length; i < l; i++) {
-      job.progress(i, files.length);
-      out_file = "public/uploads/{0}/{1}.ts".format(uid, i+1);
-      var proc = new ffmpeg({ source: files[i] })
+      var input_file = files[i];
+      console.log("starting ffmpeg for: " + input_file);
+      job.progress(i+1, files.length);
+      out_file = input_file.replace('mp4', 'ts');
+      var proc = new ffmpeg({ source: input_file })
       .withVideoCodec('copy')
       .withAudioCodec('copy')
       .addOption('-vbsf', 'h264_mp4toannexb')
       .toFormat('mpegts')
       .saveToFile(out_file, function(stdout, stderr) {
-        console.log('file has been converted succesfully');
-        done();
+        job.log('file has been converted succesfully');
       });
     }
+    done();
   });
 });
 
-app.post('/process/:uid', function (req, res) {
+app.get('/process/:uid', function (req, res) {
+  var uuid = req.params.uid;
+  console.log('starting ' + uuid);
   jobs.create('concatenate', {
-        uuid: req.params.uid
+        uuid: uuid
     }).save();
+  res.send('yep');
 });
 
 
