@@ -2,18 +2,22 @@ var kue = require('kue'),
 express = require('express'),
 ffmpeg = require('fluent-ffmpeg'),
 glob = require('glob'),
+fs = require('fs'),
+exec = require('child_process').exec,
 app = express.createServer(),
 jobs = kue.createQueue(); // create our job queue
 
 app.listen(3000);
 app.use(kue.app);
 console.log('UI started on port 3000');
+var glob_path_prefix = "/internment/";
 
 jobs.process('concatenate', 4, function(job, done) {
   var uid = job.data.uuid;
   console.log('Starting ' + uid);
   job.log('Starting ' + uid);
-  glob("/internment/" + uid + "/*.mp4", {nosort: false}, function (err, files) {
+  var recording_directory = "/internment/" + uid;
+  glob(recording_directory + "/*.mp4", {nosort: false}, function (err, files) {
     files.sort(naturalSort);
     all_files = files;
 
@@ -25,26 +29,78 @@ jobs.process('concatenate', 4, function(job, done) {
     }
     console.log("Found files: " + files.length);
     job.log("Found files: " + files.length);
+    job.data.file_count = files.length;
+    job.data.completed_files_count = 0;
+    job.save();
 
     pieces = files.length;
     var out_file;
     var out_files = [];
+    var out_file_concat = '';
+    // Convert files to MPEG-TS format
     for ( var i = 0, l = files.length; i < l; i++) {
       var input_file = files[i];
       console.log("starting ffmpeg for: " + input_file);
-      job.progress(i+1, files.length);
       out_file = input_file.replace('mp4', 'ts');
+      out_file_concat += ' ' + out_file + ' ';
       var proc = new ffmpeg({ source: input_file, priority: 10 })
       .withVideoCodec('copy')
       .withAudioCodec('copy')
       .addOption('-vbsf', 'h264_mp4toannexb')
       .toFormat('mpegts')
       .saveToFile(out_file, function(stdout, stderr) {
+        completed_files_count = job.data.completed_files_count + 1;
+        job.data.completed_files_count = completed_files_count;
+        job.progress(completed_files_count, files.length);
         job.log('file has been converted succesfully');
+        job.save();
+        // If all files have been converted, concatenate them
+        if (completed_files_count == files.length) {
+          console.log('All done!');
+          var cat_command = 'cat {0} > {1}/full.ts'.format(out_file_concat, recording_directory);
+          console.log('Meow: ' + cat_command);
+          exec(cat_command, function (error, stdout, stderr) {
+              if (error !== null) {
+                console.log('Cat failed. What should we do?\n\n' + error);
+                done();
+              } else {
+                done();
+              }
+          });
+        }
       });
     }
-    done();
   });
+});
+
+jobs.process('convert', 4, function(job, done) {
+  var uid = job.data.uuid;
+  console.log('Starting ' + uid);
+  job.log('Starting ' + uid);
+  var recording_directory = "/internment/" + uid;
+  var full_ts = recording_directory + '/full.ts';
+  var out_file = recording_directory + '/full.mp4';
+  var proc = new ffmpeg({ source: full_ts, priority: 10 })
+  .withVideoCodec('copy')
+  .withAudioCodec('copy')
+  .addOption('-absf', 'aac_adtstoasc')
+  .toFormat('mp4')
+  .onProgress(function(progress) {
+    console.log(progress);
+    job.progress(progress.percent, 100);
+  })
+  .saveToFile(out_file, function(stdout, stderr) {
+    // Cleanup TS files
+    glob(recording_directory + "/*.ts", {nosort: false}, function (err, files) {
+      var file = '';
+      for ( var i = 0, l = files.length; i < l; i++) {
+        file = files[i];
+        fs.unlink(file);
+        console.log('unlinking ' + file);
+      }
+    });
+  });
+
 });
 
 app.get('/process/:uid', function (req, res) {
@@ -57,11 +113,21 @@ app.get('/process/:uid', function (req, res) {
   res.send('yep');
 
   job.on('complete', function(){
-    console.log("Job complete");
+    var convert_job = jobs.create('convert', {
+        title: uuid,
+        uuid: uuid
+    }).save();
+    convert_job.on('complete', function(){
+      console.log("convert Job complete");
+    }).on('failed', function(){
+      console.log("convert Job failed");
+    }).on('progress', function(progress){
+      console.log('\r  convert job #' + convert_job.id + ' ' + progress + '% complete');
+    });
   }).on('failed', function(){
     console.log("Job failed");
   }).on('progress', function(progress){
-    console.log('\r  job #' + job.id + ' ' + progress + '% complete');
+    console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
 });
 
@@ -118,7 +184,6 @@ function smoosh_files(up_token, uid){
           return;
         }
 
-        var stitch_command = 'ffmpeg -i {0}/full.ts -f mp4 -vcodec copy -acodec copy -absf aac_adtstoasc {0}/full.mp4'.format('public/uploads/' + uid);
         exec(stitch_command, function (error, stdout, stderr) {
 
           if (error !== null) {
