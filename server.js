@@ -6,6 +6,7 @@ fs = require('fs'),
 exec = require('child_process').exec,
 app = express.createServer(),
 knox = require('knox'),
+Q = require('q'),
 MultiPartUpload = require('knox-mpu'),
 jobs = kue.createQueue(); // create our job queue
 
@@ -13,7 +14,6 @@ jobs = kue.createQueue(); // create our job queue
 var aws_bucket = 'openwatch-capture';
 var aws_key = process.env.AWS_KEY;
 var aws_secret = process.env.AWS_SECRET;
-var config_django = require('config').Django;
 
 var config_media = require('config').Media;
 var config_django = require('config').Django;
@@ -193,7 +193,7 @@ jobs.process('hq_upload', 4, function(job, done) {
   var hq_source_path = recording_directory + '/hq/hq.mp4';
   var hq_s3_location = '';
   var public_header = { 'x-amz-acl': 'public-read' };
-  var lq_upload = new MultiPartUpload(
+  var hq_upload = new MultiPartUpload(
       {
           client: client,
           objectName: uuid + '/hq.mp4', // Amazon S3 path
@@ -235,8 +235,8 @@ app.get('/process_lq/:up_token/:uuid', function (req, res) {
 app.get('/process_hq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
   var up_token = req.params.up_token;
-    console.log('starting lq ' + uuid);
-  res.send('Starting lq job...');
+  console.log('starting hq ' + uuid);
+  res.send('Starting hq job...');
   start_upload_hq_to_s3_job(uuid, up_token);
 });
 
@@ -317,6 +317,22 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
   });
 }
 
+function start_upload_to_failed_bucket_job(uuid, up_token) {
+  var job = jobs.create('failed_upload', {
+        title: uuid,
+        uuid: uuid,
+        up_token: up_token
+    }).save();
+
+  job.on('complete', function(){
+    console.log("Upload conflict complete.");
+  }).on('failed', function(){
+    console.log("Upload conflict Job failed");
+  }).on('progress', function(progress){
+    //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
+  });
+}
+
 function directory_for_uuid(uid) {
   return glob_path_prefix + uid;
 }
@@ -347,6 +363,28 @@ function makeEndpointUrl(endpoint){
   return config.api_schema + config.api_user + ':' + config.api_password + '@' + config.api_url + endpoint;
 }
 
+/* Utility functions */
+
+// Returns a promise which is fulfilled with 'true', 'false'
+// on success
+// requires knox, q
+function s3_exists(filepath){
+    var deferred = Q.defer();
+    try{
+        client.head(filepath).on('response', function(res){
+        //console.log(filepath + ' response statusCode: ' + res.statusCode);
+        if(res.statusCode === 404){
+            deferred.resolve(false);
+        } else{
+            deferred.resolve(true);
+        }
+        }).end();
+        
+    } catch(err){
+        deferred.reject(new Error('Request Failed'));
+    }
+    return deferred.promise;
+}
 
 // Lets us do pythonic {0}, {x}-style string substitution.
 String.prototype.format = function() {
