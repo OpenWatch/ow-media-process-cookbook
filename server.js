@@ -167,6 +167,7 @@ jobs.process('lq_upload', 4, function(job, done) {
            })
     ])
   .then(function(promises){
+    console.log('How many promises we got? This many: ' + promises.length);
     var lq_s3_location, thumb_s3_location;
     if(promises[0].isFulfilled()){
       lq_s3_location = promises[0].valueOf()['Location'];
@@ -373,8 +374,6 @@ function directory_for_uuid(uid) {
 
 function s3_upload(s3_upload_params){
     var deferred = Q.defer();
-    console.log('s3 upload params:');
-    console.log(s3_upload_params);
     var upload = new MultiPartUpload(
       {
           client: s3_upload_params.client,
@@ -385,7 +384,7 @@ function s3_upload(s3_upload_params){
     );
 
     upload.on('completed', function(body){
-      console.log('s3 mpu completed');
+      console.log('s3 mpu completed for ' + s3_upload_params.file_path);
       console.log(body);
       deferred.resolve(body);
     });
