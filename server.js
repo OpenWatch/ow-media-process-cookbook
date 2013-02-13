@@ -141,50 +141,64 @@ jobs.process('lq_upload', 4, function(job, done) {
   var thumb_source_path = recording_directory + '/thumb.jpg';
   var lq_s3_location = '';
   var thumb_s3_location = '';
+  var thumb_s3_path = uuid + '/thumb.jpg';
   var public_header = { 'x-amz-acl': 'public-read' };
-  var lq_upload = new MultiPartUpload(
-      {
-          client: client,
-          objectName: uuid + '/lq.mp4', // Amazon S3 path
-          file: lq_source_path,
-          headers: public_header
-      },
-      function(err, res) {
-        lq_s3_location = res['Location'];
-        var thumb_upload = new MultiPartUpload(
-            {
-                client: client,
-                objectName: uuid + '/thumb.jpg', // Amazon S3 path
-                file: thumb_source_path,
-                headers: public_header
-            },
-            function(err, res) {
-              thumb_s3_location = res['Location'];
-              job.log('lq: ' + lq_s3_location + '\nthumb: ' + thumb_s3_location);
-              
-              callEndpoint('end_processing', {
-                public_upload_token: up_token,
-                recording_id: uuid,
-                recording_type: 'video',
-                error_message: error,
-                path: lq_s3_location,
-                thumb: thumb_s3_location
-                }, function(error, response, body) {
-                  job.log(body);
-                  if(response === undefined){
-                    job.log("Could not reach endpoint");
-                  } else if(response.statusCode == 200){
-                    job.log("Result!");
-                    done();
-                  } else {
-                    job.log('Error: ' + response.statusCode);
-                  }
-                }
-              );
-            }
-        );
+  var lq_s3_path = uuid + '/lq.mp4';
+
+  Q.allResolved([
+    s3_upload({
+              client: client,
+              s3_path: lq_s3_path,
+              file_path: lq_source_path,
+              acl_header: public_header
+            }),
+    s3_upload({
+              client: client,
+              s3_path: thumb_s3_path,
+              file_path: thumb_source_path,
+              acl_header: public_header
+           })
+    ])
+  .then(function(promises){
+    var lq_s3_location, thumb_s3_location;
+    if(promises[0].isFulfilled()){
+      lq_s3_location = promises[0].valueOf()['Location'];
+      // TODO: Get asset path
+    }else{
+      console.log('Exception value:');
+      console.log(promises[0].valueOf().exception);
+      throw new Error('s3 Exception');
+    }
+
+    if(promises[1].isFulfilled()){
+      thumb_s3_location = promises[1].valueOf()['Location'];
+    }else{
+      console.log('Exception value:');
+      console.log(promises[1].valueOf().exception);
+      throw new Error('s3 Exception');
+    }
+
+    callEndpoint('end_processing', {
+      public_upload_token: up_token,
+      recording_id: uuid,
+      recording_type: 'video',
+      error_message: error,
+      path: lq_s3_location,
+      thumb: thumb_s3_location
+      }, function(error, response, body) {
+        job.log(body);
+        if(response === undefined){
+          job.log("Could not reach endpoint");
+        } else if(response.statusCode == 200){
+          job.log("Result!");
+          done();
+        } else {
+          job.log('Error: ' + response.statusCode);
+        }
       }
-  );
+    );
+  })
+  .done();
 });
 
 jobs.process('hq_upload', 4, function(job, done) {
@@ -336,6 +350,32 @@ function start_upload_to_failed_bucket_job(uuid, up_token) {
 
 function directory_for_uuid(uid) {
   return glob_path_prefix + uid;
+}
+
+function s3_upload(s3_upload_params){
+    var deferred = Q.defer();
+    var upload = new MultiPartUpload(
+      {
+          client: s3_upload_params.client,
+          objectName: s3_upload_params.s3_path,
+          file: s3_upload_params.file_path,
+          headers: s3_upload_params.acl_header
+      }
+    );
+
+    upload.on('completed', function(body){
+      console.log('s3 mpu completed');
+      console.log(body);
+      deferred.resolve(body);
+    });
+
+    upload.on('failed', function(result){
+      console.log('s3 mpu failed:');
+      console.log(result);
+      deferred.reject(new Error('s3 mpu failed'));
+    });
+
+    return deferred;
 }
 
 /*
