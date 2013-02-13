@@ -169,16 +169,14 @@ jobs.process('lq_upload', 4, function(job, done) {
                 path: lq_s3_location,
                 thumb: thumb_s3_location
                 }, function(error, response, body) {
+                  job.log(body);
                   if(response === undefined){
                     job.log("Could not reach endpoint");
-                    job.log(body);
                   } else if(response.statusCode == 200){
                     job.log("Result!");
-                    job.log(body);
                     done();
                   } else {
                     job.log('Error: ' + response.statusCode);
-                    job.log(body);
                   }
                 }
               );
@@ -198,7 +196,7 @@ jobs.process('hq_upload', 4, function(job, done) {
   var lq_upload = new MultiPartUpload(
       {
           client: client,
-          objectName: uuid + '/lq.mp4', // Amazon S3 path
+          objectName: uuid + '/hq.mp4', // Amazon S3 path
           file: hq_source_path,
           headers: public_header
       },
@@ -212,16 +210,14 @@ jobs.process('hq_upload', 4, function(job, done) {
           error_message: error,
           path: hq_s3_location
           }, function(error, response, body) {
+            job.log(body);
             if(response === undefined){
               job.log("Could not reach endpoint");
-              job.log(body);
             } else if(response.statusCode == 200){
               job.log("Result!");
-              job.log(body);
               done();
             } else {
               job.log('Error: ' + response.statusCode);
-              job.log(body);
             }
           }
         );
