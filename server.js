@@ -81,6 +81,7 @@ jobs.process('concatenate', 4, function(job, done) {
           exec(cat_command, function (error, stdout, stderr) {
               if (error !== null) {
                 job.log('Cat failed. What should we do?\n\n' + error);
+                return done(error);
               }
               done();
           });
@@ -132,7 +133,7 @@ jobs.process('thumbnail', 4, function(job, done) {
       if(err){
         job.log('Error creating thumbnail:');
         job.log(err);
-        throw err;
+        return done(err);
       }
       job.log('screenshots were saved');
       done();
@@ -193,19 +194,26 @@ jobs.process('lq_upload', 4, function(job, done) {
       path: lq_s3_location,
       thumb: thumb_s3_location
       }, function(error, response, body) {
-        job.log(body);
+        console.log("Call endpoint response");
         if(response === undefined){
+          console.log("Could not reach endpoint");
           job.log("Could not reach endpoint");
-          throw new Error('Could not reach Django');
+          return done(Error('Could not reach Django'));
         } else if(response.statusCode == 200){
-          job.log("Result!");
+          job.log(body);
           done();
         } else {
+          console.log('Error: ' + response.statusCode);
           job.log('Error: ' + response.statusCode);
-          throw new Error('Django error ' + response.statusCode);
+          job.log(body);
+          return done(Error('Django error ' + response.statusCode));
         }
       }
     );
+  }, function(err){
+    console.log(err);
+    job.log('Error: ' + err);
+    return done(err);
   })
   .done();
 });
@@ -253,7 +261,7 @@ jobs.process('hq_upload', 4, function(job, done) {
     console.log('S3 error:');
     console.log(err);
     job.log('Error: ' + err);
-    throw err;
+    return done(err);
   })
   .done();
 });
@@ -389,7 +397,7 @@ function s3_upload(s3_upload_params){
       deferred.resolve(body);
     });
 
-    upload.on('failed', function(result){
+    upload.on('error', function(result){
       console.log('s3 mpu failed on ' + s3_upload_params.file_path);
       //console.log(result);
       deferred.reject(new Error('s3 mpu failed'));
