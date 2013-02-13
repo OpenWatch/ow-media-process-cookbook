@@ -1,0 +1,11 @@
+Media:
+  capture_directory: "/internment/"
+
+Django:
+
+  # OpenWatch API
+  #    Turned into: api_schema + api_user + ':' + api_password + '@' + api_url
+  api_schema: http://
+  api_user: test
+  api_password: test
+  api_url: "localhost:8000/api/"
