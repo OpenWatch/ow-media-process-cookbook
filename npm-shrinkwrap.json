@@ -10,6 +10,16 @@
           "version": "1.9.2",
           "from": "connect@1.x",
           "dependencies": {
+            "qs": {
+              "version": "0.5.3",
+              "from": "qs@0.5.3",
+              "resolved": "https://registry.npmjs.org/qs/-/qs-0.5.3.tgz"
+            },
+            "mime": {
+              "version": "1.2.9",
+              "from": "mime@1.2.9",
+              "resolved": "https://registry.npmjs.org/mime/-/mime-1.2.9.tgz"
+            },
             "formidable": {
               "version": "1.0.11",
               "from": "formidable@1.0.x"
@@ -136,6 +146,16 @@
               "version": "1.9.2",
               "from": "connect@1.x",
               "dependencies": {
+                "qs": {
+                  "version": "0.5.3",
+                  "from": "qs@0.5.3",
+                  "resolved": "https://registry.npmjs.org/qs/-/qs-0.5.3.tgz"
+                },
+                "mime": {
+                  "version": "1.2.9",
+                  "from": "mime@1.2.9",
+                  "resolved": "https://registry.npmjs.org/mime/-/mime-1.2.9.tgz"
+                },
                 "formidable": {
                   "version": "1.0.11",
                   "from": "formidable@1.0.x"
@@ -216,6 +236,11 @@
                   "resolved": "https://registry.npmjs.org/underscore/-/underscore-1.4.4.tgz"
                 }
               }
+            },
+            "redis": {
+              "version": "0.8.2",
+              "from": "redis@0.8.2",
+              "resolved": "https://registry.npmjs.org/redis/-/redis-0.8.2.tgz"
             }
           }
         }
@@ -366,6 +391,36 @@
     "config": {
       "version": "0.4.18",
       "from": "config@"
+    },
+    "request": {
+      "version": "2.12.0",
+      "from": "request@",
+      "dependencies": {
+        "form-data": {
+          "version": "0.0.3",
+          "from": "form-data",
+          "dependencies": {
+            "combined-stream": {
+              "version": "0.0.3",
+              "from": "combined-stream@0.0.3",
+              "dependencies": {
+                "delayed-stream": {
+                  "version": "0.0.5",
+                  "from": "delayed-stream@0.0.5"
+                }
+              }
+            },
+            "async": {
+              "version": "0.1.9",
+              "from": "async@0.1.9"
+            }
+          }
+        },
+        "mime": {
+          "version": "1.2.7",
+          "from": "mime"
+        }
+      }
     }
   }
 }
