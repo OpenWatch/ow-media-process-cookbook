@@ -258,7 +258,7 @@ jobs.process('hq_upload', 4, function(job, done) {
   .done();
 });
 
-app.get('/process_lq/:up_token/:uuid', function (req, res) {
+app.post('/process_lq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
   var up_token = req.params.up_token;
   console.log('starting lq ' + uuid);
@@ -266,7 +266,7 @@ app.get('/process_lq/:up_token/:uuid', function (req, res) {
   start_concatenate_job(uuid, up_token);
 });
 
-app.get('/process_hq/:up_token/:uuid', function (req, res) {
+app.post('/process_hq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
   var up_token = req.params.up_token;
   console.log('starting hq ' + uuid);
