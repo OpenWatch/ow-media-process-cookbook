@@ -273,21 +273,24 @@ app.post('/process_hq/:up_token/:uuid', function (req, res) {
 });
 
 function start_concatenate_job(uuid, up_token) {
+  console.log('start_concatenate_job');
   var job = jobs.create('concatenate', {
         title: uuid,
         uuid: uuid
     }).save();
 
   job.on('complete', function(){
+    console.log('concatenate job complete');
     start_convert_job(uuid, up_token);
   }).on('failed', function(){
-    console.log("Job failed");
+    console.log("concatenate job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
 }
 
 function start_convert_job(uuid, up_token) {
+  console.log('start_convert_job');
   var convert_job = jobs.create('convert', {
       title: uuid,
       uuid: uuid
@@ -303,6 +306,7 @@ function start_convert_job(uuid, up_token) {
 }
 
 function start_thumbnail_job(uuid, up_token) {
+  console.log('start_thumbnail_job');
   var job = jobs.create('thumbnail', {
         title: uuid,
         uuid: uuid
@@ -319,6 +323,7 @@ function start_thumbnail_job(uuid, up_token) {
 }
 
 function start_upload_lq_to_s3_job(uuid, up_token) {
+  console.log('start_upload_lq_to_s3_job');
   var job = jobs.create('lq_upload', {
         title: uuid,
         uuid: uuid,
@@ -335,6 +340,7 @@ function start_upload_lq_to_s3_job(uuid, up_token) {
 }
 
 function start_upload_hq_to_s3_job(uuid, up_token) {
+  console.log('start_upload_hq_to_s3_job');
   var job = jobs.create('hq_upload', {
         title: uuid,
         uuid: uuid,
@@ -351,6 +357,7 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
 }
 
 function start_upload_to_failed_bucket_job(uuid, up_token) {
+  console.log('start_upload_to_failed_bucket_job');
   var job = jobs.create('failed_upload', {
         title: uuid,
         uuid: uuid,
