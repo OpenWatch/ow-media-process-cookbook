@@ -299,6 +299,10 @@
       "from": "nib@",
       "resolved": "https://registry.npmjs.org/nib/-/nib-0.9.1.tgz"
     },
+    "q": {
+      "version": "0.8.12",
+      "from": "q@"
+    },
     "redis": {
       "version": "0.8.2",
       "from": "redis@",
