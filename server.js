@@ -396,7 +396,7 @@ function s3_upload(s3_upload_params){
       deferred.resolve(body);
     });
 
-    upload.on('failed', function(result){
+    upload.on('error', function(result){
       console.log('s3 mpu failed on ' + s3_upload_params.file_path);
       //console.log(result);
       deferred.reject(new Error('s3 mpu failed'));
