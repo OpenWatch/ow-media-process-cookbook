@@ -7,6 +7,7 @@ exec = require('child_process').exec,
 app = express.createServer(),
 knox = require('knox'),
 Q = require('q'),
+request = require('request'),
 MultiPartUpload = require('knox-mpu'),
 jobs = kue.createQueue(); // create our job queue
 
@@ -256,7 +257,7 @@ jobs.process('hq_upload', 4, function(job, done) {
   .done();
 });
 
-app.post('/process_lq/:up_token/:uuid', function (req, res) {
+app.get('/process_lq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
   var up_token = req.params.up_token;
   console.log('starting lq ' + uuid);
@@ -264,7 +265,7 @@ app.post('/process_lq/:up_token/:uuid', function (req, res) {
   start_concatenate_job(uuid, up_token);
 });
 
-app.post('/process_hq/:up_token/:uuid', function (req, res) {
+app.get('/process_hq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
   var up_token = req.params.up_token;
   console.log('starting hq ' + uuid);
