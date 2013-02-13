@@ -16,6 +16,7 @@ var aws_key = process.env.AWS_KEY;
 var aws_secret = process.env.AWS_SECRET;
 
 var config_media = require('config').Media;
+var config_process = require('config').Process;
 var config_django = require('config').Django;
 
 // File's home
@@ -28,7 +29,7 @@ var client = knox.createClient({
     bucket: aws_bucket
 });
 
-app.listen(5001);
+app.listen(config_process.port);
 app.use(kue.app);
 console.log('UI started on port 5001');
 

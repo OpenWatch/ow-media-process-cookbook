@@ -6,9 +6,9 @@ Video processing server/queue for Node.js
 Dependencies
 ------------
 
-1. Install ffmpeg
-2. Make sure to install express@2.5.11 because the new one doesn't work.
-3. All the other stuff in `npm-shrinkwrap.json`.
+1. Install ffmpeg, Redis
+2. Start Redis with `redis-server`
+3. All the other stuff in `package.json`, which can be installed with `npm install`.
 
 Configuration
 ------------
