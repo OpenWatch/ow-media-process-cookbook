@@ -76,6 +76,7 @@ jobs.process('concatenate', 4, function(job, done) {
         if (completed_files_count == files.length) {
           var cat_command = 'cat {0} > {1}/full.ts'.format(out_file_concat, recording_directory);
           job.log('Meow: ' + cat_command);
+          console.log('cat command: ' + cat_command);
           exec(cat_command, function (error, stdout, stderr) {
               if (error !== null) {
                 job.log('Cat failed. What should we do?\n\n' + error);
@@ -127,6 +128,11 @@ jobs.process('thumbnail', 4, function(job, done) {
       timemarks: ['50%'],
       filename: 'thumb'
     }, recording_directory, function(err, filenames) {
+      if(err){
+        job.log('Error creating thumbnail:');
+        job.log(err);
+        throw err;
+      }
       job.log('screenshots were saved');
       done();
   });
@@ -182,18 +188,19 @@ jobs.process('lq_upload', 4, function(job, done) {
       public_upload_token: up_token,
       recording_id: uuid,
       recording_type: 'video',
-      error_message: error,
       path: lq_s3_location,
       thumb: thumb_s3_location
       }, function(error, response, body) {
         job.log(body);
         if(response === undefined){
           job.log("Could not reach endpoint");
+          throw new Error('Could not reach Django');
         } else if(response.statusCode == 200){
           job.log("Result!");
           done();
         } else {
           job.log('Error: ' + response.statusCode);
+          throw new Error('Django error ' + response.statusCode);
         }
       }
     );
@@ -207,39 +214,49 @@ jobs.process('hq_upload', 4, function(job, done) {
   var recording_directory = directory_for_uuid(uuid);
   var hq_source_path = recording_directory + '/hq/hq.mp4';
   var hq_s3_location = '';
+  var hq_s3_path = uuid + '/hq.mp4';
   var public_header = { 'x-amz-acl': 'public-read' };
-  var hq_upload = new MultiPartUpload(
-      {
-          client: client,
-          objectName: uuid + '/hq.mp4', // Amazon S3 path
-          file: hq_source_path,
-          headers: public_header
-      },
-      function(err, res) {
-        hq_s3_location = res['Location'];
 
-        callEndpoint('sync_hq', {
-          public_upload_token: up_token,
-          recording_id: uuid,
-          recording_type: 'video',
-          error_message: error,
-          path: hq_s3_location
-          }, function(error, response, body) {
-            job.log(body);
-            if(response === undefined){
-              job.log("Could not reach endpoint");
-            } else if(response.statusCode == 200){
-              job.log("Result!");
-              done();
-            } else {
-              job.log('Error: ' + response.statusCode);
-            }
-          }
-        );
-      });
+  s3_upload({
+              client: client,
+              s3_path: hq_s3_path,
+              file_path: hq_source_path,
+              acl_header: public_header
+            })
+  .then(function(res){
+    console.log('Got res via promise');
+    console.log(res);
+    hq_s3_location = res['Location'];
+
+    callEndpoint('sync_hq', {
+      public_upload_token: up_token,
+      recording_id: uuid,
+      recording_type: 'video',
+      path: hq_s3_location
+      }, function(error, response, body) {
+        job.log(body);
+        if(response === undefined){
+          job.log("Could not reach endpoint");
+          throw new Error('Could not reach Django');
+        } else if(response.statusCode == 200){
+          job.log("Result!");
+          done();
+        } else {
+          job.log('Error: ' + response.statusCode);
+          throw new Error('Django error ' + response.statusCode);
+        }
+      }
+    );
+  }, function(err){
+    console.log('S3 error:');
+    console.log(err);
+    job.log('Error: ' + err);
+    throw err;
+  })
+  .done();
 });
 
-app.get('/process_lq/:up_token/:uuid', function (req, res) {
+app.post('/process_lq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
   var up_token = req.params.up_token;
   console.log('starting lq ' + uuid);
@@ -247,7 +264,7 @@ app.get('/process_lq/:up_token/:uuid', function (req, res) {
   start_concatenate_job(uuid, up_token);
 });
 
-app.get('/process_hq/:up_token/:uuid', function (req, res) {
+app.post('/process_hq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
   var up_token = req.params.up_token;
   console.log('starting hq ' + uuid);
@@ -276,6 +293,7 @@ function start_convert_job(uuid, up_token) {
       uuid: uuid
   }).save();
   convert_job.on('complete', function(){
+    console.log("convert job complete");
     start_thumbnail_job(uuid, up_token);
   }).on('failed', function(){
     console.log("convert Job failed");
@@ -354,13 +372,15 @@ function directory_for_uuid(uid) {
 
 function s3_upload(s3_upload_params){
     var deferred = Q.defer();
+    console.log('s3 upload params:');
+    console.log(s3_upload_params);
     var upload = new MultiPartUpload(
       {
           client: s3_upload_params.client,
           objectName: s3_upload_params.s3_path,
           file: s3_upload_params.file_path,
           headers: s3_upload_params.acl_header
-      }
+      }, function(err, res){}
     );
 
     upload.on('completed', function(body){
@@ -370,12 +390,12 @@ function s3_upload(s3_upload_params){
     });
 
     upload.on('failed', function(result){
-      console.log('s3 mpu failed:');
-      console.log(result);
+      console.log('s3 mpu failed on ' + s3_upload_params.file_path);
+      //console.log(result);
       deferred.reject(new Error('s3 mpu failed'));
     });
 
-    return deferred;
+    return deferred.promise;
 }
 
 /*
