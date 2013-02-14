@@ -158,7 +158,8 @@ jobs.process('lq_upload', 4, function(job, done) {
               client: client,
               s3_path: lq_s3_path,
               file_path: lq_source_path,
-              acl_header: public_header
+              acl_header: public_header,
+              job: job
             }),
     s3_upload({
               client: client,
@@ -176,7 +177,7 @@ jobs.process('lq_upload', 4, function(job, done) {
     }else{
       console.log('Exception value:');
       console.log(promises[0].valueOf().exception);
-      throw new Error('s3 Exception');
+      return done(new Error(promises[0].valueOf().exception));
     }
 
     if(promises[1].isFulfilled()){
@@ -184,7 +185,7 @@ jobs.process('lq_upload', 4, function(job, done) {
     }else{
       console.log('Exception value:');
       console.log(promises[1].valueOf().exception);
-      throw new Error('s3 Exception');
+      return done(new Error(promises[1].valueOf().exception));
     }
 
     callEndpoint('end_processing', {
@@ -388,29 +389,61 @@ function directory_for_uuid(uid) {
 }
 
 function s3_upload(s3_upload_params){
-    var deferred = Q.defer();
-    var upload = new MultiPartUpload(
-      {
-          client: s3_upload_params.client,
-          objectName: s3_upload_params.s3_path,
-          file: s3_upload_params.file_path,
-          headers: s3_upload_params.acl_header
-      }, function(err, res){}
-    );
+  var filesize = 10000;
+  var part_size = 5242880;
+  var total_parts = 1;
+  var job = s3_upload_params.job;
 
-    upload.on('completed', function(body){
-      console.log('s3 mpu completed for ' + s3_upload_params.file_path);
-      console.log(body);
-      deferred.resolve(body);
-    });
+  if(typeof job != 'undefined'){
+    job.data.mpu_chunk = 0;
+    job.save();
+  }
 
-    upload.on('error', function(result){
-      console.log('s3 mpu failed on ' + s3_upload_params.file_path);
-      //console.log(result);
-      deferred.reject(new Error('s3 mpu failed'));
-    });
+  console.log('s3 mpu initiated for ' + s3_upload_params.file_path);
+  
+  fs.lstat(s3_upload_params.file_path, function(err, stats){
+      console.log(stats.size);
+      filesize = stats.size;
+      total_parts = Math.ceil(filesize / part_size);
+  });
 
-    return deferred.promise;
+  var deferred = Q.defer();
+  
+  var upload = new MultiPartUpload(
+    {
+        client: s3_upload_params.client,
+        objectName: s3_upload_params.s3_path,
+        file: s3_upload_params.file_path,
+        headers: s3_upload_params.acl_header,
+        partSize: part_size
+    }, function(err, res){}
+  );
+
+  upload.on('completed', function(body){
+    console.log('s3 mpu completed for ' + s3_upload_params.file_path);
+    console.log(body);
+    deferred.resolve(body);
+  });
+
+  upload.on('failed', function(result){
+    console.log('s3 mpu failed on ' + s3_upload_params.file_path);
+    console.log(result);
+    deferred.reject(new Error('s3 mpu failed'));
+  });
+
+  upload.on('uploaded', function(result){
+    //console.log(result);
+    if(typeof job != 'undefined'){
+      var part_id = result.part;
+      job.data.mpu_chunk = job.data.mpu_chunk + 1;
+      job.save();
+
+      job.progress(job.data.mpu_chunk, total_parts);
+      console.log('s3 mpu part ' + job.data.mpu_chunk + ' / ' + total_parts + ' completed on ' + s3_upload_params.file_path);
+    }
+  });
+
+  return deferred.promise;
 }
 
 /*
