@@ -232,7 +232,8 @@ jobs.process('hq_upload', 4, function(job, done) {
               client: client,
               s3_path: hq_s3_path,
               file_path: hq_source_path,
-              acl_header: public_header
+              acl_header: public_header,
+              job: job
             })
   .then(function(res){
     console.log('Got res via promise');
@@ -416,7 +417,11 @@ function s3_upload(s3_upload_params){
         file: s3_upload_params.file_path,
         headers: s3_upload_params.acl_header,
         partSize: part_size
-    }, function(err, res){}
+    }, function(err, res){
+      console.log('MultiPartUpload callback for ' + s3_upload_params.file_path);
+      console.log(err);
+      console.log(res);
+    }
   );
 
   upload.on('completed', function(body){
