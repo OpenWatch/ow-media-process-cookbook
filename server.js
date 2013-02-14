@@ -140,60 +140,78 @@ jobs.process('thumbnail', 4, function(job, done) {
   });
 });
 
+jobs.process('thumb_upload', 4, function(job, done) {
+  var uuid = job.data.uuid;
+  var up_token = job.data.up_token;
+  var recording_directory = directory_for_uuid(uuid);
+  var thumb_source_path = recording_directory + '/thumb.jpg';
+  var thumb_s3_path = uuid + '/thumb.jpg';
+  var public_header = { 'x-amz-acl': 'public-read' };
+
+  s3_upload({
+            client: client,
+            s3_path: thumb_s3_path,
+            file_path: thumb_source_path,
+            acl_header: public_header,
+            job: job
+          })
+  .then(function(res){
+    var thumb_s3_location = res['Location'];
+
+    callEndpoint('sync_thumbnail', {
+      public_upload_token: up_token,
+      recording_id: uuid,
+      recording_type: 'video',
+      thumb: thumb_s3_location
+      }, function(error, response, body) {
+        console.log("Call endpoint response");
+        if(response === undefined){
+          console.log("Could not reach endpoint");
+          job.log("Could not reach endpoint");
+          return done(Error('Could not reach Django'));
+        } else if(response.statusCode == 200){
+          job.log(body);
+          done();
+        } else {
+          console.log('Error: ' + response.statusCode);
+          job.log('Error: ' + response.statusCode);
+          job.log(body);
+          return done(Error('Django error ' + response.statusCode));
+        }
+      }
+    );
+
+  }, function(err){
+
+  })
+  .done();
+
+});
+
 
 jobs.process('lq_upload', 4, function(job, done) {
   var uuid = job.data.uuid;
   var up_token = job.data.up_token;
   var recording_directory = directory_for_uuid(uuid);
   var lq_source_path = recording_directory + '/full.mp4';
-  var thumb_source_path = recording_directory + '/thumb.jpg';
-  var lq_s3_location = '';
-  var thumb_s3_location = '';
-  var thumb_s3_path = uuid + '/thumb.jpg';
   var public_header = { 'x-amz-acl': 'public-read' };
   var lq_s3_path = uuid + '/lq.mp4';
 
-  Q.allResolved([
-    s3_upload({
-              client: client,
-              s3_path: lq_s3_path,
-              file_path: lq_source_path,
-              acl_header: public_header,
-              job: job
-            }),
-    s3_upload({
-              client: client,
-              s3_path: thumb_s3_path,
-              file_path: thumb_source_path,
-              acl_header: public_header
-           })
-    ])
-  .then(function(promises){
-    console.log('How many promises we got? This many: ' + promises.length);
-    var lq_s3_location, thumb_s3_location;
-    if(promises[0].isFulfilled()){
-      lq_s3_location = promises[0].valueOf()['Location'];
-      // TODO: Get asset path
-    }else{
-      console.log('Exception value:');
-      console.log(promises[0].valueOf().exception);
-      return done(new Error(promises[0].valueOf().exception));
-    }
-
-    if(promises[1].isFulfilled()){
-      thumb_s3_location = promises[1].valueOf()['Location'];
-    }else{
-      console.log('Exception value:');
-      console.log(promises[1].valueOf().exception);
-      return done(new Error(promises[1].valueOf().exception));
-    }
-
+  s3_upload({
+            client: client,
+            s3_path: lq_s3_path,
+            file_path: lq_source_path,
+            acl_header: public_header,
+            job: job
+          })
+  .then(function(res){
+    var lq_s3_location = res['Location'];
+  
     callEndpoint('end_processing', {
       public_upload_token: up_token,
       recording_id: uuid,
       recording_type: 'video',
-      path: lq_s3_location,
-      thumb: thumb_s3_location
+      path: lq_s3_location
       }, function(error, response, body) {
         console.log("Call endpoint response");
         if(response === undefined){
@@ -344,8 +362,26 @@ function start_upload_lq_to_s3_job(uuid, up_token) {
 
   job.on('complete', function(){
     console.log("Upload lq complete.");
+    start_upload_thumb_to_s3_job(uuid, up_token);
   }).on('failed', function(){
     console.log("Upload lq Job failed");
+  }).on('progress', function(progress){
+    //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
+  });
+}
+
+function start_upload_thumb_to_s3_job(uuid, up_token) {
+  console.log('start_upload_thumb_to_s3_job');
+  var job = jobs.create('thumb_upload', {
+        title: uuid,
+        uuid: uuid,
+        up_token: up_token
+    }).save();
+
+  job.on('complete', function(){
+    console.log("Upload thumb complete.");
+  }).on('failed', function(){
+    console.log("Upload thumb Job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
