@@ -60,6 +60,27 @@ jobs.process('concatenate', 4, function(job, done) {
     var out_files = [];
     var out_file_concat = '';
     // Convert files to MPEG-TS format
+    var completion_callback = function(stdout, stderr) {
+      completed_files_count = job.data.completed_files_count + 1;
+      job.data.completed_files_count = completed_files_count;
+      job.progress(completed_files_count, files.length);
+      job.log('file has been converted succesfully');
+      job.save();
+      // If all files have been converted, concatenate them
+      if (completed_files_count == files.length) {
+        var cat_command = 'cat {0} > {1}/full.ts'.format(out_file_concat, output_directory);
+        job.log('Meow: ' + cat_command);
+        console.log('cat command: ' + cat_command);
+        exec(cat_command, function (error, stdout, stderr) {
+            if (error !== null) {
+              job.log('Cat failed. What should we do?\n\n' + error);
+              return done(error);
+            }
+            done();
+        });
+      }
+    };
+
     for ( var i = 0, l = files.length; i < l; i++) {
       var input_file = files[i];
       job.log("starting ffmpeg for: " + input_file);
@@ -73,26 +94,7 @@ jobs.process('concatenate', 4, function(job, done) {
       .withAudioCodec('copy')
       .addOption('-vbsf', 'h264_mp4toannexb')
       .toFormat('mpegts')
-      .saveToFile(out_file, function(stdout, stderr) {
-        completed_files_count = job.data.completed_files_count + 1;
-        job.data.completed_files_count = completed_files_count;
-        job.progress(completed_files_count, files.length);
-        job.log('file has been converted succesfully');
-        job.save();
-        // If all files have been converted, concatenate them
-        if (completed_files_count == files.length) {
-          var cat_command = 'cat {0} > {1}/full.ts'.format(out_file_concat, output_directory);
-          job.log('Meow: ' + cat_command);
-          console.log('cat command: ' + cat_command);
-          exec(cat_command, function (error, stdout, stderr) {
-              if (error !== null) {
-                job.log('Cat failed. What should we do?\n\n' + error);
-                return done(error);
-              }
-              done();
-          });
-        }
-      });
+      .saveToFile(out_file, completion_callback);
     }
   });
 });
@@ -206,21 +208,7 @@ jobs.process('lq_upload', 4, function(job, done) {
       recording_type: 'video',
       path: lq_s3_location
       }, function(error, response, body) {
-        console.log("Call endpoint response");
-        if(response === undefined){
-          console.log("Could not reach endpoint");
-          job.log("Could not reach endpoint");
-          return done(Error('Could not reach Django'));
-        } else if(response.statusCode == 200){
-          job.log(body);
-          done();
-          return;
-        } else {
-          console.log('Error: ' + response.statusCode);
-          job.log('Error: ' + response.statusCode);
-          job.log(body);
-          return done(Error('Django error ' + response.statusCode));
-        }
+        return processCallEndpointCallback(error, response, body, job, done);
       }
     );
   }, function(err){
@@ -258,17 +246,7 @@ jobs.process('hq_upload', 4, function(job, done) {
       recording_type: 'video',
       path: hq_s3_location
       }, function(error, response, body) {
-        job.log(body);
-        if(response === undefined){
-          job.log("Could not reach endpoint");
-          throw new Error('Could not reach Django');
-        } else if(response.statusCode == 200){
-          job.log("Result!");
-          done();
-        } else {
-          job.log('Error: ' + response.statusCode);
-          throw new Error('Django error ' + response.statusCode);
-        }
+        return processCallEndpointCallback(error, response, body, job, done);
       }
     );
   }, function(err){
@@ -322,6 +300,7 @@ function start_convert_job(uuid, up_token) {
   convert_job.on('complete', function(){
     console.log("convert job complete");
     start_thumbnail_job(uuid, up_token);
+    start_upload_lq_to_s3_job(uuid, up_token);
   }).on('failed', function(){
     console.log("convert Job failed");
   }).on('progress', function(progress){
@@ -338,7 +317,7 @@ function start_thumbnail_job(uuid, up_token) {
 
   job.on('complete', function(){
     console.log("Thumbnailing complete.");
-    start_upload_lq_to_s3_job(uuid, up_token);
+    start_upload_thumb_to_s3_job(uuid, up_token);
   }).on('failed', function(){
     console.log("thumbnailing Job failed");
   }).on('progress', function(progress){
@@ -356,7 +335,6 @@ function start_upload_lq_to_s3_job(uuid, up_token) {
 
   job.on('complete', function(){
     console.log("Upload lq complete.");
-    start_upload_thumb_to_s3_job(uuid, up_token);
   }).on('failed', function(){
     console.log("Upload lq Job failed");
   }).on('progress', function(progress){
@@ -532,6 +510,7 @@ function processCallEndpointCallback(error, response, body, job, done) {
   } else if(response.statusCode == 200){
     job.log(body);
     done();
+    return;
   } else {
     console.log('Error: ' + response.statusCode);
     job.log('Error: ' + response.statusCode);

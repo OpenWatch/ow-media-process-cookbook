@@ -1,8 +1,12 @@
 Process:
   port: 5001
+  # Where NodeMediaProcess stores processed files relative to raw ones
+  processed_subdir: "/processed"
 
 Media:
-  capture_directory: "/internment/"
+  # Where NodeMediaCapture stores raw files
+  capture_directory: "/internment"
+
 
 Django:
 
