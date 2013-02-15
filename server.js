@@ -22,6 +22,8 @@ var config_django = require('config').Django;
 
 // File's home
 var glob_path_prefix = config_media.capture_directory;
+// Where to keep processed files relative to the raw data
+var processed_subdir = config_process.processed_subdir;
 
 // Knox S3 Client
 var client = knox.createClient({
@@ -37,8 +39,9 @@ console.log('UI started on port 5001');
 jobs.process('concatenate', 4, function(job, done) {
   var uuid = job.data.uuid;
   job.log('Starting ' + uuid);
-  var recording_directory = directory_for_uuid(uuid);
-  glob(recording_directory + "/*.mp4", {nosort: false}, function (err, files) {
+  var input_directory = input_directory_for_uuid(uuid);
+  var output_directory = output_directory_for_uuid(uuid);
+  glob(input_directory + "/*.mp4", {nosort: false}, function (err, files) {
     files.sort(naturalSort);
     all_files = files;
 
@@ -60,7 +63,10 @@ jobs.process('concatenate', 4, function(job, done) {
     for ( var i = 0, l = files.length; i < l; i++) {
       var input_file = files[i];
       job.log("starting ffmpeg for: " + input_file);
-      out_file = input_file.replace('mp4', 'ts');
+      //out_file = input_file.replace('mp4', 'ts');
+      out_file = output_path_for_input_path(uuid, input_file);
+      console.log('converting ' + input_file );
+      console.log(' to : ' + out_file);
       out_file_concat += ' ' + out_file + ' ';
       var proc = new ffmpeg({ source: input_file, priority: 10 })
       .withVideoCodec('copy')
@@ -75,7 +81,7 @@ jobs.process('concatenate', 4, function(job, done) {
         job.save();
         // If all files have been converted, concatenate them
         if (completed_files_count == files.length) {
-          var cat_command = 'cat {0} > {1}/full.ts'.format(out_file_concat, recording_directory);
+          var cat_command = 'cat {0} > {1}/full.ts'.format(out_file_concat, output_directory);
           job.log('Meow: ' + cat_command);
           console.log('cat command: ' + cat_command);
           exec(cat_command, function (error, stdout, stderr) {
@@ -94,9 +100,9 @@ jobs.process('concatenate', 4, function(job, done) {
 jobs.process('convert', 4, function(job, done) {
   var uuid = job.data.uuid;
   job.log('Starting ' + uuid);
-  var recording_directory = directory_for_uuid(uuid);
-  var full_ts = recording_directory + '/full.ts';
-  var out_file = recording_directory + '/full.mp4';
+  var output_directory = output_directory_for_uuid(uuid);
+  var full_ts = output_directory + '/full.ts';
+  var out_file = output_directory + '/full.mp4';
   var proc = new ffmpeg({ source: full_ts, priority: 10 })
   .withVideoCodec('copy')
   .withAudioCodec('copy')
@@ -107,7 +113,7 @@ jobs.process('convert', 4, function(job, done) {
   })
   .saveToFile(out_file, function(stdout, stderr) {
     // Cleanup TS files
-    glob(recording_directory + "/*.ts", {nosort: false}, function (err, files) {
+    glob(output_directory + "/*.ts", {nosort: false}, function (err, files) {
       var file = '';
       for ( var i = 0, l = files.length; i < l; i++) {
         file = files[i];
@@ -121,15 +127,15 @@ jobs.process('convert', 4, function(job, done) {
 jobs.process('thumbnail', 4, function(job, done) {
   var uuid = job.data.uuid;
   job.log('Starting thumbnail for ' + uuid);
-  var recording_directory = directory_for_uuid(uuid);
-  var source_path = recording_directory + '/full.mp4';
+  var output_directory = output_directory_for_uuid(uuid);
+  var source_path = output_directory + '/full.mp4';
   var proc = new ffmpeg({ source: source_path })
   .withSize('300x300')
   .takeScreenshots({
       count: 1,
       timemarks: ['50%'],
       filename: 'thumb'
-    }, recording_directory, function(err, filenames) {
+    }, output_directory, function(err, filenames) {
       if(err){
         job.log('Error creating thumbnail:');
         job.log(err);
@@ -143,8 +149,8 @@ jobs.process('thumbnail', 4, function(job, done) {
 jobs.process('thumb_upload', 4, function(job, done) {
   var uuid = job.data.uuid;
   var up_token = job.data.up_token;
-  var recording_directory = directory_for_uuid(uuid);
-  var thumb_source_path = recording_directory + '/thumb.jpg';
+  var output_directory = output_directory_for_uuid(uuid);
+  var thumb_source_path = output_directory + '/thumb.jpg';
   var thumb_s3_path = uuid + '/thumb.jpg';
   var public_header = { 'x-amz-acl': 'public-read' };
 
@@ -192,8 +198,8 @@ jobs.process('thumb_upload', 4, function(job, done) {
 jobs.process('lq_upload', 4, function(job, done) {
   var uuid = job.data.uuid;
   var up_token = job.data.up_token;
-  var recording_directory = directory_for_uuid(uuid);
-  var lq_source_path = recording_directory + '/full.mp4';
+  var output_directory = output_directory_for_uuid(uuid);
+  var lq_source_path = output_directory + '/full.mp4';
   var public_header = { 'x-amz-acl': 'public-read' };
   var lq_s3_path = uuid + '/lq.mp4';
 
@@ -240,8 +246,8 @@ jobs.process('lq_upload', 4, function(job, done) {
 jobs.process('hq_upload', 4, function(job, done) {
   var uuid = job.data.uuid;
   var up_token = job.data.up_token;
-  var recording_directory = directory_for_uuid(uuid);
-  var hq_source_path = recording_directory + '/hq/hq.mp4';
+  var input_directory = input_directory_for_uuid(uuid);
+  var hq_source_path = input_directory + '/hq/hq.mp4';
   var hq_s3_location = '';
   var hq_s3_path = uuid + '/hq.mp4';
   var public_header = { 'x-amz-acl': 'public-read' };
@@ -421,8 +427,24 @@ function start_upload_to_failed_bucket_job(uuid, up_token) {
   });
 }
 
-function directory_for_uuid(uid) {
-  return glob_path_prefix + uid;
+function input_directory_for_uuid(uid) {
+  return glob_path_prefix + '/' + uid;
+}
+
+function output_directory_for_uuid(uid) {
+  return glob_path_prefix + '/' + uid + processed_subdir;
+}
+
+function output_path_for_input_path(uid, input_path) {
+  // in: /internment/uuid/1.mp4
+  // out: /internment/uuid/<processed_subdir>/1.mp4
+  var filename = input_path.split('/');
+  filename = filename[filename.length -1].replace('mp4', 'ts');
+  var output_dir = output_directory_for_uuid(uid);
+  if (!fs.existsSync(output_dir)) {
+    fs.mkdirSync(output_dir);
+  }
+  return output_dir + '/' + filename;
 }
 
 function s3_upload(s3_upload_params){
