@@ -185,20 +185,7 @@ jobs.process('thumb_upload', 4, function(job, done) {
       recording_type: 'video',
       thumb: thumb_s3_location
       }, function(error, response, body) {
-        console.log("Call endpoint response");
-        if(response === undefined){
-          console.log("Could not reach endpoint");
-          job.log("Could not reach endpoint");
-          return done(Error('Could not reach Django'));
-        } else if(response.statusCode == 200){
-          job.log(body);
-          done();
-        } else {
-          console.log('Error: ' + response.statusCode);
-          job.log('Error: ' + response.statusCode);
-          job.log(body);
-          return done(Error('Django error ' + response.statusCode));
-        }
+        return processCallEndpointCallback(error, response, body, job, done);
       }
     );
 
@@ -252,6 +239,7 @@ jobs.process('lq_upload', 4, function(job, done) {
         } else if(response.statusCode == 200){
           job.log(body);
           done();
+          return;
         } else {
           console.log('Error: ' + response.statusCode);
           job.log('Error: ' + response.statusCode);
@@ -569,6 +557,23 @@ function callEndpoint(endpoint, params, callback){
 function makeEndpointUrl(endpoint){
   var config = config_django;
   return config.api_schema + config.api_user + ':' + config.api_password + '@' + config.api_url + endpoint;
+}
+
+function processCallEndpointCallback(error, response, body, job, done) {
+  console.log("Call endpoint response");
+  if(typeof response == 'undefined'){
+    console.log("Could not reach endpoint");
+    job.log("Could not reach endpoint");
+    return done(Error('Could not reach Django'));
+  } else if(response.statusCode == 200){
+    job.log(body);
+    done();
+  } else {
+    console.log('Error: ' + response.statusCode);
+    job.log('Error: ' + response.statusCode);
+    job.log(body);
+    return done(Error('Django error ' + response.statusCode));
+  }
 }
 
 /* Utility functions */
