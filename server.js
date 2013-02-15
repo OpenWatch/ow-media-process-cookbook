@@ -11,14 +11,15 @@ request = require('request'),
 MultiPartUpload = require('knox-mpu'),
 jobs = kue.createQueue(); // create our job queue
 
-// AWS Settings
-var aws_bucket = 'openwatch-capture';
-var aws_key = process.env.AWS_KEY;
-var aws_secret = process.env.AWS_SECRET;
-
 var config_media = require('config').Media;
 var config_process = require('config').Process;
 var config_django = require('config').Django;
+
+// AWS Settings
+var aws_bucket = config_process.aws_bucket;
+var aws_rejected_bucket = config_process.aws_rejected_bucket;
+var aws_key = process.env.AWS_KEY;
+var aws_secret = process.env.AWS_SECRET;
 
 // File's home
 var glob_path_prefix = config_media.capture_directory;
@@ -30,6 +31,12 @@ var client = knox.createClient({
     key: aws_key,
     secret: aws_secret,
     bucket: aws_bucket
+});
+
+var reject_client = knox.createClient({
+    key: aws_key,
+    secret: aws_secret,
+    bucket: aws_rejected_bucket
 });
 
 app.listen(config_process.port);
@@ -65,8 +72,6 @@ jobs.process('concatenate', 4, function(job, done) {
       job.log("starting ffmpeg for: " + input_file);
       //out_file = input_file.replace('mp4', 'ts');
       out_file = output_path_for_input_path(uuid, input_file);
-      console.log('converting ' + input_file );
-      console.log(' to : ' + out_file);
       out_file_concat += ' ' + out_file + ' ';
       var proc = new ffmpeg({ source: input_file, priority: 10 })
       .withVideoCodec('copy')
@@ -154,13 +159,23 @@ jobs.process('thumb_upload', 4, function(job, done) {
   var thumb_s3_path = uuid + '/thumb.jpg';
   var public_header = { 'x-amz-acl': 'public-read' };
 
-  s3_upload({
-            client: client,
+  var s3_client = client;
+
+  s3_exists(thumb_s3_path)
+  .then(function(exists){
+    if(exists){
+      s3_client = reject_client;
+    }
+  })
+  .then(function(){
+  return s3_upload({
+            client: s3_client,
             s3_path: thumb_s3_path,
             file_path: thumb_source_path,
             acl_header: public_header,
             job: job
-          })
+          });
+  })
   .then(function(res){
     var thumb_s3_location = res['Location'];
 
@@ -203,13 +218,23 @@ jobs.process('lq_upload', 4, function(job, done) {
   var public_header = { 'x-amz-acl': 'public-read' };
   var lq_s3_path = uuid + '/lq.mp4';
 
-  s3_upload({
-            client: client,
+  var s3_client = client;
+
+  s3_exists(lq_s3_path)
+  .then(function(exists){
+    if(exists){
+      s3_client = reject_client;
+    }
+  })
+  .then(function(){
+  return s3_upload({
+            client: s3_client,
             s3_path: lq_s3_path,
             file_path: lq_source_path,
             acl_header: public_header,
             job: job
-          })
+          });
+  })
   .then(function(res){
     var lq_s3_location = res['Location'];
   
@@ -252,13 +277,24 @@ jobs.process('hq_upload', 4, function(job, done) {
   var hq_s3_path = uuid + '/hq.mp4';
   var public_header = { 'x-amz-acl': 'public-read' };
 
-  s3_upload({
-              client: client,
+  var s3_client = client;
+
+  s3_exists(hq_s3_path)
+  .then(function(exists){
+    console.log('s3 exists: ' + exists);
+    if(exists === true){
+      s3_client = reject_client;
+    }
+  })
+  .then(function(){
+  return s3_upload({
+              client: s3_client,
               s3_path: hq_s3_path,
               file_path: hq_source_path,
               acl_header: public_header,
               job: job
-            })
+            });
+  })
   .then(function(res){
     console.log('Got res via promise');
     console.log(res);
@@ -539,7 +575,6 @@ function makeEndpointUrl(endpoint){
 
 // Returns a promise which is fulfilled with 'true', 'false'
 // on success
-// requires knox, q
 function s3_exists(filepath){
     var deferred = Q.defer();
     try{

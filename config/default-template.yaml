@@ -2,6 +2,8 @@ Process:
   port: 5001
   # Where NodeMediaProcess stores processed files relative to raw ones
   processed_subdir: "/processed"
+  aws_bucket: "openwatch-capture"
+  aws_rejected_bucket: "openwatch-capture-rejected"
 
 Media:
   # Where NodeMediaCapture stores raw files
