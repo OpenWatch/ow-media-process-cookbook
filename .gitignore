@@ -2,3 +2,4 @@
 node_modules/
 default.yaml
 runtime.json
+*.orig
