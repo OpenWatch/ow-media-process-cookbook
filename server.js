@@ -20,6 +20,7 @@ var aws_bucket = config_process.aws_bucket;
 var aws_rejected_bucket = config_process.aws_rejected_bucket;
 var aws_key = process.env.AWS_KEY;
 var aws_secret = process.env.AWS_SECRET;
+var aws_headers = { 'x-amz-acl': 'public-read' };
 
 // File's home
 var glob_path_prefix = config_media.capture_directory;
@@ -159,7 +160,6 @@ jobs.process('thumb_upload', 4, function(job, done) {
   var output_directory = output_directory_for_uuid(uuid);
   var thumb_source_path = output_directory + '/thumb.jpg';
   var thumb_s3_path = uuid + '/thumb.jpg';
-  var public_header = { 'x-amz-acl': 'public-read' };
 
   var s3_client = client;
 
@@ -174,7 +174,7 @@ jobs.process('thumb_upload', 4, function(job, done) {
             client: s3_client,
             s3_path: thumb_s3_path,
             file_path: thumb_source_path,
-            acl_header: public_header,
+            acl_header: aws_headers,
             job: job
           });
   })
@@ -192,7 +192,7 @@ jobs.process('thumb_upload', 4, function(job, done) {
     );
 
   }, function(err){
-
+    return s3_error_handler(err, job, done);
   })
   .done();
 
@@ -204,7 +204,6 @@ jobs.process('lq_upload', 4, function(job, done) {
   var up_token = job.data.up_token;
   var output_directory = output_directory_for_uuid(uuid);
   var lq_source_path = output_directory + '/full.mp4';
-  var public_header = { 'x-amz-acl': 'public-read' };
   var lq_s3_path = uuid + '/lq.mp4';
 
   var s3_client = client;
@@ -220,7 +219,7 @@ jobs.process('lq_upload', 4, function(job, done) {
             client: s3_client,
             s3_path: lq_s3_path,
             file_path: lq_source_path,
-            acl_header: public_header,
+            acl_header: aws_headers,
             job: job
           });
   })
@@ -237,9 +236,7 @@ jobs.process('lq_upload', 4, function(job, done) {
       }
     );
   }, function(err){
-    console.log(err);
-    job.log('Error: ' + err);
-    return done(err);
+    return s3_error_handler(err, job, done);
   })
   .done();
 });
@@ -251,7 +248,6 @@ jobs.process('hq_upload', 4, function(job, done) {
   var hq_source_path = input_directory + '/hq/hq.mp4';
   var hq_s3_location = '';
   var hq_s3_path = uuid + '/hq.mp4';
-  var public_header = { 'x-amz-acl': 'public-read' };
 
   var s3_client = client;
 
@@ -267,7 +263,7 @@ jobs.process('hq_upload', 4, function(job, done) {
               client: s3_client,
               s3_path: hq_s3_path,
               file_path: hq_source_path,
-              acl_header: public_header,
+              acl_header: aws_headers,
               job: job
             });
   })
@@ -286,13 +282,12 @@ jobs.process('hq_upload', 4, function(job, done) {
       }
     );
   }, function(err){
-    console.log('S3 error:');
-    console.log(err);
-    job.log('Error: ' + err);
-    return done(err);
+    return s3_error_handler(err, job, done);
   })
   .done();
 });
+
+/* API entry points */
 
 app.post('/process_lq/:up_token/:uuid', function (req, res) {
   var uuid = req.params.uuid;
@@ -310,12 +305,14 @@ app.post('/process_hq/:up_token/:uuid', function (req, res) {
   start_upload_hq_to_s3_job(uuid, up_token);
 });
 
+/* functions to start jobs */
+
 function start_concatenate_job(uuid, up_token) {
   console.log('start_concatenate_job');
   var job = jobs.create('concatenate', {
-        title: uuid,
-        uuid: uuid
-    }).save();
+      title: uuid,
+      uuid: uuid
+  }).save();
 
   job.on('complete', function(){
     console.log('concatenate job complete');
@@ -429,25 +426,6 @@ function start_upload_to_failed_bucket_job(uuid, up_token) {
   });
 }
 
-function input_directory_for_uuid(uid) {
-  return glob_path_prefix + '/' + uid;
-}
-
-function output_directory_for_uuid(uid) {
-  return glob_path_prefix + '/' + uid + processed_subdir;
-}
-
-function output_path_for_input_path(uid, input_path) {
-  // in: /internment/uuid/1.mp4
-  // out: /internment/uuid/<processed_subdir>/1.mp4
-  var filename = input_path.split('/');
-  filename = filename[filename.length -1].replace('mp4', 'ts');
-  var output_dir = output_directory_for_uuid(uid);
-  if (!fs.existsSync(output_dir)) {
-    fs.mkdirSync(output_dir);
-  }
-  return output_dir + '/' + filename;
-}
 
 function s3_upload(s3_upload_params){
   var filesize = 10000;
@@ -557,24 +535,50 @@ function processCallEndpointCallback(error, response, body, job, done) {
 
 /* Utility functions */
 
+function s3_error_handler(err, job, done) {
+    console.log('S3 error:');
+    console.log(err);
+    job.log('Error: ' + err);
+    return done(err);
+}
+
+function input_directory_for_uuid(uid) {
+  return glob_path_prefix + '/' + uid;
+}
+
+function output_directory_for_uuid(uid) {
+  return glob_path_prefix + '/' + uid + processed_subdir;
+}
+
+function output_path_for_input_path(uid, input_path) {
+  // in: /internment/uuid/1.mp4
+  // out: /internment/uuid/<processed_subdir>/1.mp4
+  var filename = input_path.split('/');
+  filename = filename[filename.length -1].replace('mp4', 'ts');
+  var output_dir = output_directory_for_uuid(uid);
+  if (!fs.existsSync(output_dir)) {
+    fs.mkdirSync(output_dir);
+  }
+  return output_dir + '/' + filename;
+}
+
 // Returns a promise which is fulfilled with 'true', 'false'
 // on success
 function s3_exists(filepath){
-    var deferred = Q.defer();
-    try{
-        client.head(filepath).on('response', function(res){
-        //console.log(filepath + ' response statusCode: ' + res.statusCode);
-        if(res.statusCode === 404){
-            deferred.resolve(false);
-        } else{
-            deferred.resolve(true);
-        }
-        }).end();
-        
-    } catch(err){
-        deferred.reject(new Error('Request Failed'));
+  var deferred = Q.defer();
+  try {
+    client.head(filepath).on('response', function(res){
+    //console.log(filepath + ' response statusCode: ' + res.statusCode);
+    if(res.statusCode === 404){
+      deferred.resolve(false);
+    } else {
+      deferred.resolve(true);
     }
-    return deferred.promise;
+    }).end();
+  } catch(err){
+    deferred.reject(new Error('Request Failed'));
+  }
+  return deferred.promise;
 }
 
 // Lets us do pythonic {0}, {x}-style string substitution.
