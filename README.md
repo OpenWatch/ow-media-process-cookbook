@@ -19,15 +19,17 @@ Configuration
 Job Types
 ------------
 
-* concatenate
+* `concatenate`
 	* globs *.mp4, converts to .ts, cats them together into full.ts
-* convert
+* `convert`
 	* converts full.ts to full.mp4
-* thumbnail
+* `thumbnail`
 	* generates thumb.jpg from full.mp4
-* lq_upload
-	* uploads thumb.jpg and full.mp4 to S3 bucket
-* hq_upload
+* `thumb_upload`
+	* uploads thumb.jpg to S3 bucket
+* `lq_upload`
+	* uploads full.mp4 to S3 bucket
+* `hq_upload`
 	* uploads hq.mp4 to S3 bucket 
 
 API Endpoints
