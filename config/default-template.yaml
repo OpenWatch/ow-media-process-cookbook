@@ -4,6 +4,8 @@ Process:
   processed_subdir: "/processed"
   aws_bucket: "openwatch-capture"
   aws_rejected_bucket: "openwatch-capture-rejected"
+  aws_key : "aws_key_here"
+  aws_secret : "aws_secret"
 
 Media:
   # Where NodeMediaCapture stores raw files
