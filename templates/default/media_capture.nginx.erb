@@ -1,0 +1,31 @@
+server {
+    listen      <%= @http_listen_port %> ;
+    server_name <%= @app_domain %> www.<%= @app_domain %>;
+    rewrite     ^   https://$server_name$request_uri? permanent;
+}
+
+server {
+
+    listen <%= @https_listen_port %> ;
+    client_max_body_size 9999M;
+    server_name <%= @app_domain %> www.<%= @app_domain %>;
+    ssl on;
+    ssl_certificate <%= @ssl_cert %>;
+    ssl_certificate_key <%= @ssl_key %>;
+    keepalive_timeout 70;
+    root <%= @app_root %>;
+    access_log <%= @access_log %>;
+    error_log <%= @error_log %>;
+
+    location / {
+        proxy_pass_header Server;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Scheme $scheme;
+        proxy_connect_timeout 10;
+        proxy_read_timeout 10;
+        proxy_pass <%= @proxy_pass %>;
+    }
+
+}

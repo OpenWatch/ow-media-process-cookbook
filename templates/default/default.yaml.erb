@@ -1,0 +1,22 @@
+Process:
+  port: <%= @app_port %>
+  # Where NodeMediaProcess stores processed files relative to raw ones
+  processed_subdir: "<%= @processed_subdir %>"
+  aws_bucket: "<%= @aws_bucket %>"
+  aws_rejected_bucket: "<%= @aws_rejected_bucket %>"
+  aws_key: "<%= @aws_key %>"
+  aws_secret: "<%= @aws_secret %>"
+
+Media:
+  # Where NodeMediaCapture stores raw files
+  capture_directory: "<%= @capture_directory %>"
+
+
+Django:
+
+  # OpenWatch API
+  #    Turned into: api_schema + api_user + ':' + api_password + '@' + api_url
+  api_schema: "<%= @django_api_schema %>"
+  api_user: "<%= @django_api_user %>"
+  api_password: "<%= @django_api_password %>"
+  api_url: "<%= @django_api_url %>"
