@@ -25,8 +25,8 @@ client.patchGlobal(function() {
 // AWS Settings
 var aws_bucket = config_process.aws_bucket;
 var aws_rejected_bucket = config_process.aws_rejected_bucket;
-var aws_key = process.env.AWS_KEY;
-var aws_secret = process.env.AWS_SECRET;
+var aws_key = config_process.aws_key;
+var aws_secret = config_process.aws_secret;
 var aws_headers = { 'x-amz-acl': 'public-read' };
 
 // File's home
