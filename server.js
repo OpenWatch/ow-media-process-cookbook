@@ -9,11 +9,18 @@ knox = require('knox'),
 Q = require('q'),
 request = require('request'),
 MultiPartUpload = require('knox-mpu'),
+raven = require('raven'),
 jobs = kue.createQueue(); // create our job queue
 
 var config_media = require('config').Media;
 var config_process = require('config').Process;
 var config_django = require('config').Django;
+
+var client = new raven.Client(config_process.sentryDSN);
+client.patchGlobal(function() {
+  console.log('Uncaught exception, restarting server...');
+  process.exit(1);
+});
 
 // AWS Settings
 var aws_bucket = config_process.aws_bucket;
@@ -307,6 +314,14 @@ app.post('/process_hq/:up_token/:uuid', function (req, res) {
 
 /* functions to start jobs */
 
+function generateErrorMessage(uuid, up_token, message) {
+  var error_message = message;
+  error_message += '\nuuid: ' + uuid;
+  error_message += '\nup_token: ' + up_token;
+  console.log(error_message);
+  client.captureMessage(error_message);
+}
+
 function start_concatenate_job(uuid, up_token) {
   console.log('start_concatenate_job');
   var job = jobs.create('concatenate', {
@@ -318,7 +333,7 @@ function start_concatenate_job(uuid, up_token) {
     console.log('concatenate job complete');
     start_convert_job(uuid, up_token);
   }).on('failed', function(){
-    console.log("concatenate job failed");
+    generateErrorMessage(uuid, up_token, "concatenate job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
@@ -335,7 +350,7 @@ function start_convert_job(uuid, up_token) {
     start_thumbnail_job(uuid, up_token);
     start_upload_lq_to_s3_job(uuid, up_token);
   }).on('failed', function(){
-    console.log("convert Job failed");
+    generateErrorMessage(uuid, up_token, "convert Job failed");
   }).on('progress', function(progress){
     //console.log('\r  convert job #' + convert_job.id + ' ' + progress + '% complete');
   });
@@ -352,7 +367,7 @@ function start_thumbnail_job(uuid, up_token) {
     console.log("Thumbnailing complete.");
     start_upload_thumb_to_s3_job(uuid, up_token);
   }).on('failed', function(){
-    console.log("thumbnailing Job failed");
+    generateErrorMessage(uuid, up_token, "thumbnailing Job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
@@ -369,7 +384,7 @@ function start_upload_lq_to_s3_job(uuid, up_token) {
   job.on('complete', function(){
     console.log("Upload lq complete.");
   }).on('failed', function(){
-    console.log("Upload lq Job failed");
+    generateErrorMessage(uuid, up_token, "Upload lq Job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
@@ -386,7 +401,7 @@ function start_upload_thumb_to_s3_job(uuid, up_token) {
   job.on('complete', function(){
     console.log("Upload thumb complete.");
   }).on('failed', function(){
-    console.log("Upload thumb Job failed");
+    generateErrorMessage(uuid, up_token, "Upload thumb Job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
@@ -403,7 +418,7 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
   job.on('complete', function(){
     console.log("Upload lq complete.");
   }).on('failed', function(){
-    console.log("Upload lq Job failed");
+    generateErrorMessage(uuid, up_token, "Upload lq Job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
@@ -420,7 +435,7 @@ function start_upload_to_failed_bucket_job(uuid, up_token) {
   job.on('complete', function(){
     console.log("Upload conflict complete.");
   }).on('failed', function(){
-    console.log("Upload conflict Job failed");
+    generateErrorMessage(uuid, up_token, "Upload conflict Job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
@@ -551,6 +566,7 @@ function output_directory_for_uuid(uid) {
 }
 
 function output_path_for_input_path(uid, input_path) {
+  var deferred = Q.defer();
   // in: /internment/uuid/1.mp4
   // out: /internment/uuid/<processed_subdir>/1.mp4
   var filename = input_path.split('/');
