@@ -1,10 +1,4 @@
 server {
-    listen      <%= @http_listen_port %> ;
-    server_name <%= @app_domain %> www.<%= @app_domain %>;
-    rewrite     ^   https://$server_name$request_uri? permanent;
-}
-
-server {
 
     listen <%= @https_listen_port %> ;
     client_max_body_size 9999M;
