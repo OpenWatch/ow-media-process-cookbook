@@ -48,6 +48,7 @@ var reject_client = knox.createClient({
 });
 
 app.listen(config_process.port);
+app.use(express.basicAuth('admin', config_process.kue_pw));
 app.use(kue.app);
 console.log('UI started on port 5001');
 
