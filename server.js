@@ -48,9 +48,8 @@ var reject_client = knox.createClient({
 });
 
 app.listen(config_process.port);
-app.use(express.basicAuth('admin', config_process.kue_pw));
+app.use(express.basicAuth(config_process.http_user, config_process.http_pw));
 app.use(kue.app);
-console.log('UI started on port 5001');
 
 jobs.process('concatenate', 4, function(job, done) {
   var uuid = job.data.uuid;

@@ -7,7 +7,8 @@ Process:
   aws_key : "aws_key_here"
   aws_secret : "aws_secret"
   sentryDSN: ""
-  kue_pw: ""
+  http_user: ""
+  http_pw: ""
 
 Media:
   # Where NodeMediaCapture stores raw files
