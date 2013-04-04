@@ -1,3 +1,5 @@
+include_recipe "python"
+
 # Establish ssh wrapper for the git user
 
 app_root = node['ow_media_process']['app_root']
@@ -54,7 +56,8 @@ template app_root + '/current' + node['ow_media_process']['config_path'] do
     :django_api_schema => node['ow_media_process']['django_api_schema'],
     :django_api_user => node['ow_media_process']['django_api_user'],
     :django_api_password => secrets['django_api_password'],
-    :django_api_url => node['ow_media_process']['django_api_url'] ##
+    :django_api_url => node['ow_media_process']['django_api_url'],
+    :sentry_dsn => secrets['sentry_dsn']
     })
 end
 

@@ -31,20 +31,21 @@ default['ow_media_process']['app_log_file']		    = "ow_media_process.log"
 default['ow_media_process']['run_script']	    	= "run.sh"
 
 # Nginx
-default['ow_media_process']['http_listen_port']     = 80
-default['ow_media_process']['https_listen_port']    = 443
+default['ow_media_process']['http_listen_port']     = 3000
+default['ow_media_process']['https_listen_port']    = 3001
 default['ow_media_process']['ssl_dir']				= "/srv/ssl/"
 default['ow_media_process']['ssl_cert']     		= "star_openwatch_net.crt"
 default['ow_media_process']['ssl_key']     			= "star_openwatch_net.key"
 default['ow_media_process']['access_log']     		= "nginx_access_media_capture.log"
 default['ow_media_process']['error_log']     		= "nginx_error_media_capture.log"
-default['ow_media_process']['proxy_pass']     		= "http://localhost:5001" ##
+default['ow_media_process']['proxy_pass']     		= "http://localhost"
+default['ow_media_process']['app_domain']			= "capture.openwatch.net"
 
 # NodeMediaCapture
 default['ow_media_process']['temp_bucket']			= "/internment"
 
 # NodeMediaProcess
-default['ow_media_process']['app_port']	    		= 5001
+default['ow_media_process']['app_port']	    		= 3000
 default['ow_media_process']['processed_subdir']	    = "/processed"
 default['ow_media_process']['aws_bucket']	    	= "openwatch-capture"
 default['ow_media_process']['aws_rejected_bucket']	= "openwatch-capture-rejected"
