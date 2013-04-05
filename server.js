@@ -16,8 +16,8 @@ var config_media = require('config').Media;
 var config_process = require('config').Process;
 var config_django = require('config').Django;
 
-var client = new raven.Client(config_process.sentryDSN);
-client.patchGlobal(function() {
+var raven_client = new raven.Client(config_process.sentryDSN);
+raven_client.patchGlobal(function() {
   console.log('Uncaught exception, restarting server...');
   process.exit(1);
 });
@@ -35,13 +35,13 @@ var glob_path_prefix = config_media.capture_directory;
 var processed_subdir = config_process.processed_subdir;
 
 // Knox S3 Client
-var client = knox.createClient({
+var s3client = knox.createClient({
     key: aws_key,
     secret: aws_secret,
     bucket: aws_bucket
 });
 
-var reject_client = knox.createClient({
+var reject_s3client = knox.createClient({
     key: aws_key,
     secret: aws_secret,
     bucket: aws_rejected_bucket
@@ -168,17 +168,17 @@ jobs.process('thumb_upload', 4, function(job, done) {
   var thumb_source_path = output_directory + '/thumb.jpg';
   var thumb_s3_path = uuid + '/thumb.jpg';
 
-  var s3_client = client;
+  var upload_client = s3client;
 
-  s3_exists(thumb_s3_path)
+  s3_exists(upload_client, thumb_s3_path)
   .then(function(exists){
     if(exists){
-      s3_client = reject_client;
+      upload_client = reject_s3client;
     }
   })
   .then(function(){
   return s3_upload({
-            client: s3_client,
+            client: upload_client,
             s3_path: thumb_s3_path,
             file_path: thumb_source_path,
             acl_header: aws_headers,
@@ -213,17 +213,17 @@ jobs.process('lq_upload', 4, function(job, done) {
   var lq_source_path = output_directory + '/full.mp4';
   var lq_s3_path = uuid + '/lq.mp4';
 
-  var s3_client = client;
+  var upload_client = s3client;
 
-  s3_exists(lq_s3_path)
+  s3_exists(upload_client, lq_s3_path)
   .then(function(exists){
     if(exists){
-      s3_client = reject_client;
+      upload_client = reject_s3client;
     }
   })
   .then(function(){
   return s3_upload({
-            client: s3_client,
+            client: upload_client,
             s3_path: lq_s3_path,
             file_path: lq_source_path,
             acl_header: aws_headers,
@@ -256,18 +256,18 @@ jobs.process('hq_upload', 4, function(job, done) {
   var hq_s3_location = '';
   var hq_s3_path = uuid + '/hq.mp4';
 
-  var s3_client = client;
+  var upload_client = s3client;
 
-  s3_exists(hq_s3_path)
+  s3_exists(upload_client, hq_s3_path)
   .then(function(exists){
     console.log('s3 exists: ' + exists);
     if(exists === true){
-      s3_client = reject_client;
+      upload_client = reject_s3client;
     }
   })
   .then(function(){
   return s3_upload({
-              client: s3_client,
+              client: upload_client,
               s3_path: hq_s3_path,
               file_path: hq_source_path,
               acl_header: aws_headers,
@@ -319,7 +319,7 @@ function generateErrorMessage(uuid, up_token, message) {
   error_message += '\nuuid: ' + uuid;
   error_message += '\nup_token: ' + up_token;
   console.log(error_message);
-  client.captureMessage(error_message);
+  raven_client.captureMessage(error_message);
 }
 
 function start_concatenate_job(uuid, up_token) {
@@ -580,10 +580,10 @@ function output_path_for_input_path(uid, input_path) {
 
 // Returns a promise which is fulfilled with 'true', 'false'
 // on success
-function s3_exists(filepath){
+function s3_exists(s3client, filepath){
   var deferred = Q.defer();
   try {
-    client.head(filepath).on('response', function(res){
+    s3client.head(filepath).on('response', function(res){
     //console.log(filepath + ' response statusCode: ' + res.statusCode);
     if(res.statusCode === 404){
       deferred.resolve(false);
