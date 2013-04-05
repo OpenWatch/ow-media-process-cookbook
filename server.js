@@ -10,6 +10,7 @@ Q = require('q'),
 request = require('request'),
 MultiPartUpload = require('knox-mpu'),
 raven = require('raven'),
+path = require('path'),
 jobs = kue.createQueue(); // create our job queue
 
 var config_media = require('config').Media;
@@ -454,7 +455,7 @@ function s3_upload(s3_upload_params){
   }
 
   console.log('s3 mpu initiated for ' + s3_upload_params.file_path);
-  
+
   fs.lstat(s3_upload_params.file_path, function(err, stats){
       console.log(stats.size);
       filesize = stats.size;
@@ -462,7 +463,10 @@ function s3_upload(s3_upload_params){
   });
 
   var deferred = Q.defer();
-  
+
+  if(path.extname(s3_upload_params.file_path) == ".jpg"){
+    s3_upload_params.acl_header['Content-Type'] = "image/jpeg";
+  }
   var upload = new MultiPartUpload(
     {
         client: s3_upload_params.client,
