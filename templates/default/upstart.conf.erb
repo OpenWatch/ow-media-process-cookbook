@@ -11,6 +11,10 @@ setuid <%= @service_user %>
 start on net-device-up
 stop on shutdown
 
+console log
+
+expect fork
+
 respawn
 
 script

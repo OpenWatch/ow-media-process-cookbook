@@ -54,10 +54,12 @@ template app_root + '/current' + node['ow_media_process']['config_path'] do
     :aws_secret => secrets['aws_secret'],
     :capture_directory => node['ow_media_process']['temp_bucket'],
     :django_api_schema => node['ow_media_process']['django_api_schema'],
-    :django_api_user => node['ow_media_process']['django_api_user'],
+    :django_api_user => secrets['django_api_user'],
     :django_api_password => secrets['django_api_password'],
     :django_api_url => node['ow_media_process']['django_api_url'],
-    :sentry_dsn => secrets['sentry_dsn']
+    :sentry_dsn => secrets['sentry_dsn'],
+    :http_user => secrets['http_user'],
+    :http_pw => secrets['http_pw']
     })
 end
 
@@ -93,5 +95,5 @@ end
 # Register capture app as a service
 service node['ow_media_process']['service_name'] do
   provider Chef::Provider::Service::Upstart
-  action :start
+  action [:stop, :start]
 end

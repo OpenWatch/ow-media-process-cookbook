@@ -19,7 +19,8 @@ default['ow_media_process']['ssl_databag_item_name'] 	= "ssl"
 default['ow_media_process']['app_root']      		= "/var/www/NodeMediaProcess"
 default['ow_media_process']['config_path']       	= "/config/default.yaml"
 default['ow_media_process']['git_user']      		= "git"
-default['ow_media_process']['service_user']      	= "media-process"
+# default['ow_media_process']['service_user']      	= "media-process"
+default['ow_media_process']['service_user']      	= "media-capture"  # Due to node.js fs.mkdir mode bug
 default['ow_media_process']['service_user_group']   = "service_users"
 default['ow_media_process']['service_user_gid']     = 500
 default['ow_media_process']['service_name']      	= "ow_media_process"
@@ -45,13 +46,11 @@ default['ow_media_process']['app_domain']			= "capture.openwatch.net"
 default['ow_media_process']['temp_bucket']			= "/internment"
 
 # NodeMediaProcess
-default['ow_media_process']['app_port']	    		= 3000
+default['ow_media_process']['app_port']	    		= 5001
 default['ow_media_process']['processed_subdir']	    = "/processed"
 default['ow_media_process']['aws_bucket']	    	= "openwatch-capture"
 default['ow_media_process']['aws_rejected_bucket']	= "openwatch-capture-rejected"
-default['ow_media_process']['process_api_url']		= "localhost/api/"
 
 # Django
 default['ow_media_process']['django_api_schema']	= "https://"
 default['ow_media_process']['django_api_url']		= "alpha.openwatch.net/api"
-default['ow_media_process']['django_api_user']		= "test"
