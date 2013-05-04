@@ -77,6 +77,11 @@ jobs.process('concatenate', 4, function(job, done) {
     var out_file_concat = '';
     // Convert files to MPEG-TS format
     var completion_callback = function(stdout, stderr) {
+      if(typeof stderr != 'undefined'){
+        job.log('FFmpeg individual cat failed.\n\n' + error);
+        raven_client.captureError(new Error('ffmpeg convert job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout)));
+        return done(error);
+      }
       completed_files_count = job.data.completed_files_count + 1;
       job.data.completed_files_count = completed_files_count;
       job.progress(completed_files_count, files.length);
@@ -89,6 +94,7 @@ jobs.process('concatenate', 4, function(job, done) {
         console.log('cat command: ' + cat_command);
         exec(cat_command, function (error, stdout, stderr) {
             if (error !== null) {
+              raven_client.captureMessage('concat job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout));
               job.log('Cat failed. What should we do?\n\n' + error);
               return done(error);
             }
@@ -129,6 +135,11 @@ jobs.process('convert', 4, function(job, done) {
   })
   .saveToFile(out_file, function(stdout, stderr) {
     // Cleanup TS files
+    if(typeof stderr != 'undefined'){
+      job.log('FFmpeg full convert failed.\n\n' + error);
+        raven_client.captureError(new Error('ffmpeg full convert job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout)));
+        return done(error);
+      }
     glob(output_directory + "/*.ts", {nosort: false}, function (err, files) {
       var file = '';
       for ( var i = 0, l = files.length; i < l; i++) {
@@ -153,6 +164,7 @@ jobs.process('thumbnail', 4, function(job, done) {
       filename: 'thumb'
     }, output_directory, function(err, filenames) {
       if(err){
+        raven_client.captureError(new Error('ffmpeg thumbnail error ' + String(err)));
         job.log('Error creating thumbnail:');
         job.log(err);
         return done(err);
@@ -233,7 +245,7 @@ jobs.process('lq_upload', 4, function(job, done) {
   })
   .then(function(res){
     var lq_s3_location = res['Location'];
-  
+
     callEndpoint('end_processing', {
       public_upload_token: up_token,
       recording_id: uuid,
@@ -380,7 +392,7 @@ function start_upload_lq_to_s3_job(uuid, up_token) {
         title: uuid,
         uuid: uuid,
         up_token: up_token
-    }).save();
+    }).attempts(4).save();
 
   job.on('complete', function(){
     console.log("Upload lq complete.");
@@ -397,7 +409,7 @@ function start_upload_thumb_to_s3_job(uuid, up_token) {
         title: uuid,
         uuid: uuid,
         up_token: up_token
-    }).save();
+    }).attempts(4).save();
 
   job.on('complete', function(){
     console.log("Upload thumb complete.");
@@ -414,7 +426,7 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
         title: uuid,
         uuid: uuid,
         up_token: up_token
-    }).save();
+    }).attempts(4).save();
 
   job.on('complete', function(){
     console.log("Upload lq complete.");
@@ -431,7 +443,7 @@ function start_upload_to_failed_bucket_job(uuid, up_token) {
         title: uuid,
         uuid: uuid,
         up_token: up_token
-    }).save();
+    }).attempts(4).save();
 
   job.on('complete', function(){
     console.log("Upload conflict complete.");
@@ -557,6 +569,7 @@ function processCallEndpointCallback(error, response, body, job, done) {
 function s3_error_handler(err, job, done) {
     console.log('S3 error:');
     console.log(err);
+    raven_client.captureError(new Error('S3 error ' + String(err)));
     job.log('Error: ' + err);
     return done(err);
 }
