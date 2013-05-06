@@ -114,6 +114,7 @@ jobs.process('concatenate', 4, function(job, done) {
       .withVideoCodec('copy')
       .withAudioCodec('copy')
       .addOption('-vbsf', 'h264_mp4toannexb')
+      .addOption('-loglevel', 'fatal')
       .toFormat('mpegts')
       .saveToFile(out_file, completion_callback);
     }
@@ -130,6 +131,7 @@ jobs.process('convert', 4, function(job, done) {
   .withVideoCodec('copy')
   .withAudioCodec('copy')
   .addOption('-absf', 'aac_adtstoasc')
+  .addOption('-loglevel', 'fatal')
   .toFormat('mp4')
   .onProgress(function(progress) {
     job.progress(progress.percent, 100);
