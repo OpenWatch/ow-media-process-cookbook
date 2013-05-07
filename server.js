@@ -79,9 +79,9 @@ jobs.process('concatenate', 4, function(job, done) {
     var completion_callback = function(stdout, stderr) {
       if(typeof stderr != 'undefined'){
         job.log('FFmpeg individual cat failed.\n\n' + String(stderr));
-        error = new Error('ffmpeg convert job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout));
-        raven_client.captureError(error);
-        return done(error);
+        var raven_error = new Error('ffmpeg convert job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout));
+        raven_client.captureError(raven_error);
+        return done(raven_error);
       }
       completed_files_count = job.data.completed_files_count + 1;
       job.data.completed_files_count = completed_files_count;
@@ -95,7 +95,8 @@ jobs.process('concatenate', 4, function(job, done) {
         console.log('cat command: ' + cat_command);
         exec(cat_command, function (error, stdout, stderr) {
             if (error !== null) {
-              raven_client.captureMessage('concat job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout));
+              var raven_error = new Error('ffmpeg concat job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout) + ' error: ' + String(error));
+              raven_client.captureError(raven_error);
               job.log('Cat failed. What should we do?\n\n' + error);
               return done(error);
             }
@@ -350,7 +351,8 @@ function start_concatenate_job(uuid, up_token) {
     console.log('concatenate job complete');
     start_convert_job(uuid, up_token);
   }).on('failed', function(){
-    generateErrorMessage(uuid, up_token, "concatenate job failed");
+    // Raven will report Error when it happens for better feedback
+    //generateErrorMessage(uuid, up_token, "concatenate job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
@@ -367,7 +369,8 @@ function start_convert_job(uuid, up_token) {
     start_thumbnail_job(uuid, up_token);
     start_upload_lq_to_s3_job(uuid, up_token);
   }).on('failed', function(){
-    generateErrorMessage(uuid, up_token, "convert Job failed");
+    // Raven will report Error when it happens for better feedback
+    //generateErrorMessage(uuid, up_token, "convert Job failed");
   }).on('progress', function(progress){
     //console.log('\r  convert job #' + convert_job.id + ' ' + progress + '% complete');
   });
