@@ -78,10 +78,10 @@ jobs.process('concatenate', 4, function(job, done) {
     // Convert files to MPEG-TS format
     var completion_callback = function(stdout, stderr) {
       if(typeof stderr != 'undefined'){
-        job.log('FFmpeg individual cat failed.\n\n' + String(stderr));
-        var raven_error = new Error('ffmpeg convert job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout));
-        raven_client.captureError(raven_error);
-        return done(raven_error);
+        job.log('FFmpeg individual cat stderr.\n\n' + String(stderr));
+        //var raven_error = new Error('ffmpeg convert job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout));
+        //raven_client.captureError(raven_error);
+        //return done(raven_error);
       }
       completed_files_count = job.data.completed_files_count + 1;
       job.data.completed_files_count = completed_files_count;
@@ -140,10 +140,10 @@ jobs.process('convert', 4, function(job, done) {
   .saveToFile(out_file, function(stdout, stderr) {
     // Cleanup TS files
     if(typeof stderr != 'undefined'){
-      job.log('FFmpeg full convert failed.\n\n' + String(stderr));
-        error = new Error('ffmpeg full convert job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout));
-        raven_client.captureError(error);
-        return done(error);
+      job.log('FFmpeg full convert stderr.\n\n' + String(stderr));
+        //error = new Error('ffmpeg full convert job error. stderror: ' + String(stderr) + ' stdout: ' + String(stdout));
+        //raven_client.captureError(error);
+        //return done(error);
       }
     glob(output_directory + "/*.ts", {nosort: false}, function (err, files) {
       var file = '';
