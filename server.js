@@ -168,6 +168,7 @@ jobs.process('thumbnail', 4, function(job, done) {
       source_path = hq_path;
     }
   }
+  job.log('attempting screeenshot on file: ' + source_path);
   var proc = new ffmpeg({ source: source_path })
   .withSize('300x300')
   .takeScreenshots({
