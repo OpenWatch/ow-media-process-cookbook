@@ -161,6 +161,13 @@ jobs.process('thumbnail', 4, function(job, done) {
   job.log('Starting thumbnail for ' + uuid);
   var output_directory = output_directory_for_uuid(uuid);
   var source_path = output_directory + '/full.mp4';
+  if(!fs.existsSync(source_path)){
+    //if full.mp4 not present, check for /hq/hq.mp4
+    var hq_path = output_directory + "/hq/hq.mp4";
+    if(fs.existsSync(hq_path)){
+      source_path = hq_path;
+    }
+  }
   var proc = new ffmpeg({ source: source_path })
   .withSize('300x300')
   .takeScreenshots({
@@ -437,6 +444,7 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
 
   job.on('complete', function(){
     console.log("Upload lq complete.");
+    start_thumbnail_job(uuid, up_token);
   }).on('failed', function(){
     generateErrorMessage(uuid, up_token, "Upload lq Job failed");
   }).on('progress', function(progress){
