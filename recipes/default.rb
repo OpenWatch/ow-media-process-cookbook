@@ -23,7 +23,7 @@ template "/etc/init/" + node['ow_media_process']['service_name'] + ".conf" do
     group node['ow_media_process']['service_user_gid'] 
     variables({
     :service_user => node['ow_media_process']['service_user'],
-    :app_root => node['ow_media_process']['app_root'] + '/current',
+    :app_root => node['ow_media_process']['app_root'],
     :run_script => node['ow_media_process']['run_script'],
     :log_path => node['ow_media_process']['log_dir'] + node['ow_media_process']['app_log_file']
     })
