@@ -11,7 +11,9 @@ request = require('request'),
 MultiPartUpload = require('knox-mpu'),
 raven = require('raven'),
 path = require('path'),
-jobs = kue.createQueue(); // create our job queue
+jobs = kue.createQueue(), // create our job queue
+AWS = require('aws-sdk');
+
 
 var config_media = require('config').Media;
 var config_process = require('config').Process;
@@ -29,6 +31,11 @@ var aws_rejected_bucket = config_process.aws_rejected_bucket;
 var aws_key = config_process.aws_key;
 var aws_secret = config_process.aws_secret;
 var aws_headers = { 'x-amz-acl': 'public-read' };
+var elastictranscoder = new AWS.ElasticTranscoder({
+                              apiVersion: '2012-09-25',
+                              accessKeyId: aws_key,
+                              secretAccessKey: aws_secret,
+                              region: 'us-east-1'});
 
 // File's home
 var glob_path_prefix = config_media.capture_directory;
@@ -232,6 +239,87 @@ jobs.process('thumb_upload', 4, function(job, done) {
 });
 
 
+jobs.process('transcode', 4, function(job, done) {
+  var uuid = job.data.uuid;
+  var input_path = uuid + '/hq.mp4';
+  var webm_output_path = uuid + '/video.webm';
+  var lowball_path =  'low';
+  var medium_path = 'medium';
+  var master_m3u8 = 'master';
+  var output_prefix = uuid + '/';
+
+  elastictranscoder.createJob({
+    PipelineId:'1372097099278-8yljby',
+    Input: {
+        Key: input_path,
+        FrameRate: 'auto',
+        Resolution: 'auto',
+        AspectRatio: 'auto',
+        Interlaced: 'false',
+        Container: 'auto'
+    },
+    Outputs: [{
+        Key: webm_output_path,
+        PresetId: '1372366218568-vq0wdi',
+        ThumbnailPattern: '',
+        Rotate: 'auto'
+    }]
+
+    }, function (err, data) {
+    if (err) {
+      console.log('Amazon Error: ' + err); // an error occurred
+      console.log(err);
+      job.log(err);
+    } else {
+      //done();
+      //console.log(data); // successful response
+    }
+  });
+
+
+  elastictranscoder.createJob({
+    PipelineId:'1372097099278-8yljby',
+    Input: {
+        Key: input_path,
+        FrameRate: 'auto',
+        Resolution: 'auto',
+        AspectRatio: 'auto',
+        Interlaced: 'false',
+        Container: 'auto'
+    },
+    Outputs: [{
+        Key: lowball_path,
+        PresetId: '1372108323193-3kjt3u',
+        ThumbnailPattern: '',
+        Rotate: 'auto',
+        SegmentDuration: '10'
+    }, {
+        Key: medium_path,
+        PresetId: '1351620000001-200040',
+        ThumbnailPattern: '',
+        Rotate: 'auto',
+        SegmentDuration: '10'
+    }],
+    OutputKeyPrefix: output_prefix,
+    Playlists: [{
+      Name: master_m3u8,
+      Format: 'HLSv3',
+      OutputKeys: [lowball_path, medium_path]
+    }]
+    }, function (err, data) {
+    if (err) {
+      console.log('Amazon Error: ' + err); // an error occurred
+      console.log(err);
+      job.log(err);
+    } else {
+      //done();
+      //console.log(data); // successful response
+    }
+  });
+  done();
+});
+
+
 jobs.process('lq_upload', 4, function(job, done) {
   var uuid = job.data.uuid;
   var up_token = job.data.up_token;
@@ -401,6 +489,19 @@ function start_thumbnail_job(uuid, up_token) {
   });
 }
 
+function start_transcode_job(uuid) {
+  console.log('start_transcode_job');
+  var job = jobs.create('transcode', {
+        uuid: uuid
+    }).attempts(4).save();
+
+  job.on('complete', function(){
+    console.log("Transcode request sent to Amazon");
+  }).on('failed', function(){
+    generateErrorMessage(uuid, s3_path, "Transcode Job failed");
+  });
+}
+
 function start_upload_lq_to_s3_job(uuid, up_token) {
   console.log('start_upload_lq_to_s3_job');
   var job = jobs.create('lq_upload', {
@@ -444,10 +545,11 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
     }).attempts(4).save();
 
   job.on('complete', function(){
-    console.log("Upload lq complete.");
+    console.log("Upload hq complete.");
+    start_transcode_job(uuid);
     start_thumbnail_job(uuid, up_token);
   }).on('failed', function(){
-    generateErrorMessage(uuid, up_token, "Upload lq Job failed");
+    generateErrorMessage(uuid, up_token, "Upload hq Job failed");
   }).on('progress', function(progress){
     //console.log('\r  concat job #' + job.id + ' ' + progress + '% complete');
   });
