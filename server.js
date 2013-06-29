@@ -247,6 +247,7 @@ jobs.process('transcode', 4, function(job, done) {
   var medium_path = 'medium';
   var master_m3u8 = 'master';
   var output_prefix = uuid + '/';
+  var thumbnail_path = output_prefix + '{count}';
 
   elastictranscoder.createJob({
     PipelineId:'1372097099278-8yljby',
@@ -260,8 +261,8 @@ jobs.process('transcode', 4, function(job, done) {
     },
     Outputs: [{
         Key: webm_output_path,
-        PresetId: '1372366218568-vq0wdi',
-        ThumbnailPattern: '',
+        PresetId: '1372469880621-rgfwbv',
+        ThumbnailPattern: thumbnail_path,
         Rotate: 'auto'
     }]
 
