@@ -270,7 +270,7 @@ jobs.process('transcode', 4, function(job, done) {
         },
         {
           Key: h264_baseline_output_path,
-          PresetId: '1372728120145-z4wjqp',
+          PresetId: '1372793171454-lierpi',
           ThumbnailPattern: '',
           Rotate: 'auto'
         }
