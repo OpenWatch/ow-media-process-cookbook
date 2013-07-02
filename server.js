@@ -250,7 +250,7 @@ jobs.process('transcode', 4, function(job, done) {
   var output_prefix = uuid + '/';
   var thumbnail_path = output_prefix + '{count}';
 
-  // WebM 600k
+  // WebM 600k + Baseline h264
   elastictranscoder.createJob({
     PipelineId:'1372097099278-8yljby',
     Input: {
@@ -261,41 +261,20 @@ jobs.process('transcode', 4, function(job, done) {
         Interlaced: 'false',
         Container: 'auto'
     },
-    Outputs: [{
-        Key: webm_output_path,
-        PresetId: '1372469880621-rgfwbv',
-        ThumbnailPattern: thumbnail_path,
-        Rotate: 'auto'
-    }]
-
-    }, function (err, data) {
-    if (err) {
-      console.log('Amazon Error: ' + err); // an error occurred
-      console.log(err);
-      job.log(err);
-    } else {
-      //done();
-      //console.log(data); // successful response
-    }
-  });
-
-  // Baseline h264
-  elastictranscoder.createJob({
-    PipelineId:'1372097099278-8yljby',
-    Input: {
-        Key: input_path,
-        FrameRate: 'auto',
-        Resolution: 'auto',
-        AspectRatio: 'auto',
-        Interlaced: 'false',
-        Container: 'auto'
-    },
-    Outputs: [{
-        Key: h264_baseline_output_path,
-        PresetId: '1372728120145-z4wjqp',
-        ThumbnailPattern: '',
-        Rotate: 'auto'
-    }]
+    Outputs: [
+        {
+          Key: webm_output_path,
+          PresetId: '1372469880621-rgfwbv',
+          ThumbnailPattern: thumbnail_path,
+          Rotate: 'auto'
+        },
+        {
+          Key: h264_baseline_output_path,
+          PresetId: '1372728120145-z4wjqp',
+          ThumbnailPattern: '',
+          Rotate: 'auto'
+        }
+    ]
 
     }, function (err, data) {
     if (err) {
