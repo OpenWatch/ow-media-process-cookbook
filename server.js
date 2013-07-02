@@ -243,12 +243,14 @@ jobs.process('transcode', 4, function(job, done) {
   var uuid = job.data.uuid;
   var input_path = uuid + '/hq.mp4';
   var webm_output_path = uuid + '/video.webm';
+  var h264_baseline_output_path = uuid + '/video.mp4';
   var lowball_path =  'low';
   var medium_path = 'medium';
   var master_m3u8 = 'master';
   var output_prefix = uuid + '/';
   var thumbnail_path = output_prefix + '{count}';
 
+  // WebM 600k
   elastictranscoder.createJob({
     PipelineId:'1372097099278-8yljby',
     Input: {
@@ -277,7 +279,36 @@ jobs.process('transcode', 4, function(job, done) {
     }
   });
 
+  // Baseline h264
+  elastictranscoder.createJob({
+    PipelineId:'1372097099278-8yljby',
+    Input: {
+        Key: input_path,
+        FrameRate: 'auto',
+        Resolution: 'auto',
+        AspectRatio: 'auto',
+        Interlaced: 'false',
+        Container: 'auto'
+    },
+    Outputs: [{
+        Key: h264_baseline_output_path,
+        PresetId: '1372728120145-z4wjqp',
+        ThumbnailPattern: '',
+        Rotate: 'auto'
+    }]
 
+    }, function (err, data) {
+    if (err) {
+      console.log('Amazon Error: ' + err); // an error occurred
+      console.log(err);
+      job.log(err);
+    } else {
+      //done();
+      //console.log(data); // successful response
+    }
+  });
+
+  // HLS Stream
   elastictranscoder.createJob({
     PipelineId:'1372097099278-8yljby',
     Input: {
