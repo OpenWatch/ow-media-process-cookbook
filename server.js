@@ -434,6 +434,17 @@ app.post('/process_hq/:up_token/:uuid', function (req, res) {
   var up_token = req.params.up_token;
   console.log('starting hq ' + uuid);
   res.send('Starting hq job...');
+  var filePath = 'https://capture.openwatch.net/media/' + uuid + '/hq/hq.mp4';
+  callEndpoint('sync_hq', {
+      public_upload_token: up_token,
+      recording_id: uuid,
+      recording_type: 'video',
+      path: filePath
+      }, function(error, response, body) {
+        return processCallEndpointCallback(error, response, body, job, done);
+      }
+    );
+
   start_upload_hq_to_s3_job(uuid, up_token);
 });
 
