@@ -175,7 +175,6 @@ jobs.process('thumbnail', 4, function(job, done) {
       source_path = hq_path;
     }
   }
-
   job.log('attempting screeenshot on file: ' + String(source_path));
   var proc = new ffmpeg({ source: source_path })
   .withSize('640x480')
@@ -203,21 +202,6 @@ jobs.process('thumb_upload', 4, function(job, done) {
   var thumb_s3_path = uuid + '/thumb.jpg';
 
   var upload_client = s3client;
-
-  var filePath = 'https://capture.openwatch.net/media/' + uuid + '/processed/thumb.jpg';
-
-
-  callEndpoint('sync_thumbnail', {
-      public_upload_token: up_token,
-      recording_id: uuid,
-      recording_type: 'video',
-      thumb: filePath
-      }, function(error, response, body) {
-        var job = null;
-        var done = null;
-        return processCallEndpointCallback(error, response, body, job, done);
-      }
-    );
 
   s3_exists(upload_client, thumb_s3_path)
   .then(function(exists){
@@ -450,19 +434,6 @@ app.post('/process_hq/:up_token/:uuid', function (req, res) {
   var up_token = req.params.up_token;
   console.log('starting hq ' + uuid);
   res.send('Starting hq job...');
-  var filePath = 'https://capture.openwatch.net/media/' + uuid + '/hq/hq.mp4';
-  callEndpoint('sync_hq', {
-      public_upload_token: up_token,
-      recording_id: uuid,
-      recording_type: 'video',
-      path: filePath
-      }, function(error, response, body) {
-	var job = null;
-	var done = null;
-        return processCallEndpointCallback(error, response, body, job, done);
-      }
-    );
-
   start_upload_hq_to_s3_job(uuid, up_token);
 });
 
@@ -578,8 +549,6 @@ function start_upload_thumb_to_s3_job(uuid, up_token) {
 
 function start_upload_hq_to_s3_job(uuid, up_token) {
   console.log('start_upload_hq_to_s3_job');
-  start_thumbnail_job(uuid, up_token);
-  
   var job = jobs.create('hq_upload', {
         title: uuid,
         uuid: uuid,
@@ -589,6 +558,7 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
   job.on('complete', function(){
     console.log("Upload hq complete.");
     start_transcode_job(uuid);
+    start_thumbnail_job(uuid, up_token);
   }).on('failed', function(){
     generateErrorMessage(uuid, up_token, "Upload hq Job failed");
   }).on('progress', function(progress){
@@ -615,7 +585,68 @@ function start_upload_to_failed_bucket_job(uuid, up_token) {
 
 
 function s3_upload(s3_upload_params){
-  return upload_to_s3(s3_upload_params.file_path, s3_upload_params.s3_path);
+  var filesize = 10000;
+  var part_size = 5242880;
+  var total_parts = 1;
+  var job = s3_upload_params.job;
+
+  if(typeof job != 'undefined'){
+    job.data.mpu_chunk = 0;
+    job.save();
+  }
+
+  console.log('s3 mpu initiated for ' + s3_upload_params.file_path);
+
+  fs.lstat(s3_upload_params.file_path, function(err, stats){
+      console.log(stats.size);
+      filesize = stats.size;
+      total_parts = Math.ceil(filesize / part_size);
+  });
+
+  var deferred = Q.defer();
+
+  if(path.extname(s3_upload_params.file_path) == ".jpg"){
+    s3_upload_params.acl_header['Content-Type'] = "image/jpeg";
+  }
+  var upload = new MultiPartUpload(
+    {
+        client: s3_upload_params.client,
+        objectName: s3_upload_params.s3_path,
+        file: s3_upload_params.file_path,
+        headers: s3_upload_params.acl_header,
+        partSize: part_size
+    }, function(err, res){
+      console.log('MultiPartUpload callback for ' + s3_upload_params.file_path);
+      console.log(err);
+      console.log(res);
+    }
+  );
+
+  upload.on('completed', function(body){
+    console.log('s3 mpu completed for ' + s3_upload_params.file_path);
+    console.log(body);
+    deferred.resolve(body);
+  });
+
+  upload.on('failed', function(result){
+    console.log('s3 mpu failed on ' + s3_upload_params.file_path);
+    console.log(result);
+    deferred.reject(new Error('s3 mpu failed'));
+  });
+
+  upload.on('uploaded', function(result){
+    //console.log(result);
+    if(typeof job != 'undefined'){
+      var part_id = result.part;
+      job.data.mpu_chunk = job.data.mpu_chunk + 1;
+      job.save();
+
+      job.progress(job.data.mpu_chunk, total_parts);
+      console.log('s3 mpu part ' + job.data.mpu_chunk + ' / ' + total_parts + ' completed on ' + s3_upload_params.file_path);
+    }
+  });
+
+  return deferred.promise;
 }
 
 /*
@@ -646,13 +677,6 @@ function makeEndpointUrl(endpoint){
 
 function processCallEndpointCallback(error, response, body, job, done) {
   console.log("Call endpoint response");
-
-  if (job === null) {
-     console.log('No job');
-     console.log(error);
-     return;
-  }
-
   if(typeof response == 'undefined'){
     console.log("Could not reach endpoint");
     job.log("Could not reach endpoint");
@@ -773,110 +797,4 @@ String.prototype.format = function() {
         if (oFxNcL > oFyNcL) return 1;
     }
     return 0;
-}
-
-
-function completeMultipartUpload(s3, doneParams, deferred) {
-  s3.completeMultipartUpload(doneParams, function(err, data) {
-    if (err) {
-      console.log("An error occurred while completing the multipart upload");
-      console.log(err);
-      deferred.reject(new Error('s3 error'));
-    } else {
-      var delta = (new Date() - startTime) / 1000;
-      console.log('Completed upload in', delta, 'seconds');
-      console.log('Final upload data:', data);
-      deferred.resolve('s3_done');
-    }
-  });
-}
-
-function uploadPart(s3, multipart, partParams, tryNum, deferred) {
-  var tryNum = tryNum || 1;
-  s3.uploadPart(partParams, function(multiErr, mData) {
-    if (multiErr){
-      console.log('multiErr, upload part error:', multiErr);
-      if (tryNum < maxUploadTries) {
-        console.log('Retrying upload of part: #', partParams.PartNumber);
-        uploadPart(s3, multipart, partParams, tryNum + 1, deferred);
-      } else {
-        console.log('Failed uploading part: #', partParams.PartNumber);
-        deferred.reject(new Error('failed uploading part'));
-      }
-      return;
-    }
-    multipartMap.Parts[this.request.params.PartNumber - 1] = {
-      ETag: mData.ETag,
-      PartNumber: Number(this.request.params.PartNumber)
-    };
-    console.log("Completed part", this.request.params.PartNumber);
-    console.log('mData', mData);
-    if (--numPartsLeft > 0) return; // complete only when all parts uploaded
-
-    var doneParams = {
-      Bucket: bucket,
-      Key: fileKey,
-      MultipartUpload: multipartMap,
-      UploadId: multipart.UploadId
-    };
-
-    console.log("Completing upload...");
-    completeMultipartUpload(s3, doneParams, deferred);
-
-  });
-}
-
-function upload_to_s3(input_path, output_key) {
-  // Based on Glacier's example: http://docs.aws.amazon.com/AWSJavaScriptSDK/guide/examples.html#Amazon_Glacier__Multi-part_Upload
-  var s3 = new AWS.S3();
-
-  // File
-  var filePath = input_path;
-  var fileKey = output_key;
-  var buffer = fs.readFileSync(filePath);
-  // S3 Upload options
-  var bucket = aws_bucket;
-
-  // Upload
-  var startTime = new Date();
-  var partNum = 0;
-  var partSize = 1024 * 1024 * 5; // Minimum 5MB per chunk (except the last part) http://docs.aws.amazon.com/AmazonS3/latest/API/mpUploadComplete.html
-  var numPartsLeft = Math.ceil(buffer.length / partSize);
-  var maxUploadTries = 3;
-  var multiPartParams = {
-      Bucket: bucket,
-      Key: fileKey
-  };
-  var multipartMap = {
-      Parts: []
-  };
-
-  var deferred = Q.defer();
-
-  // Multipart
-  console.log("Creating multipart upload for:", fileKey);
-  s3.createMultipartUpload(multiPartParams, function(mpErr, multipart){
-    if (mpErr) { console.log('Error!', mpErr); return; }
-    console.log("Got upload ID", multipart.UploadId);
-
-    // Grab each partSize chunk and upload it as a part
-    for (var rangeStart = 0; rangeStart < buffer.length; rangeStart += partSize) {
-      partNum++;
-
-      var end = Math.min(rangeStart + partSize, buffer.length),
-          partParams = {
-            Body: buffer.slice(rangeStart, end),
-            Bucket: bucket,
-            Key: fileKey,
-            PartNumber: String(partNum),
-            UploadId: multipart.UploadId
-          };
-
-      // Send a single part
-      console.log('Uploading part: #', partParams.PartNumber, ', Range start:', rangeStart);
-      uploadPart(s3, multipart, partParams, deferred);
-    }
-  });
-
-  return deferred.promise;
 }
