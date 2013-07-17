@@ -833,7 +833,7 @@ function upload_to_s3(input_path, output_key) {
   // File
   var filePath = input_path;
   var fileKey = output_key;
-  var buffer = fs.readFileSync('./' + filePath);
+  var buffer = fs.readFileSync(filePath);
   // S3 Upload options
   var bucket = aws_bucket;
 
