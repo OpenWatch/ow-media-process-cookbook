@@ -1,5 +1,5 @@
 {
-  "name": "NodeMediaProcess",
+  "name": "nodemediaprocess",
   "version": "0.0.2",
   "description": "node media process",
   "main": "server.js",
