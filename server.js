@@ -549,6 +549,7 @@ function start_upload_thumb_to_s3_job(uuid, up_token) {
 
 function start_upload_hq_to_s3_job(uuid, up_token) {
   console.log('start_upload_hq_to_s3_job');
+  start_thumbnail_job(uuid, up_token);
   var job = jobs.create('hq_upload', {
         title: uuid,
         uuid: uuid,
@@ -558,7 +559,7 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
   job.on('complete', function(){
     console.log("Upload hq complete.");
     start_transcode_job(uuid);
-    start_thumbnail_job(uuid, up_token);
+    //start_thumbnail_job(uuid, up_token);
   }).on('failed', function(){
     generateErrorMessage(uuid, up_token, "Upload hq Job failed");
   }).on('progress', function(progress){
