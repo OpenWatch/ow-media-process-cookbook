@@ -37,6 +37,17 @@ git node['ow_media_process']['app_root'] do
    group node['ow_media_process']['service_user_group']
 end
 
+# Create /.git/config
+template node['ow_media_process']['app_root'] + "/.git/config" do
+    source "config.erb"
+    owner node['ow_media_process']['git_user']
+    group node['ow_media_process']['service_user_group']
+    variables({
+      :git_url => node['ow_media_process']['git_url']
+    })
+    action :create
+end
+
 # create default.yaml
 secrets = Chef::EncryptedDataBagItem.load(node['ow_media_process']['secret_databag_name'], node['ow_media_process']['secret_item_name'])
 
