@@ -1,0 +1,25 @@
+Process:
+  port: 5001
+  # Where NodeMediaProcess stores processed files relative to raw ones
+  processed_subdir: "/processed"
+  aws_bucket: "openwatch-capture"
+  aws_rejected_bucket: "openwatch-capture-rejected"
+  aws_key : "aws_key_here"
+  aws_secret : "aws_secret"
+  sentryDSN: ""
+  http_user: ""
+  http_pw: ""
+
+Media:
+  # Where NodeMediaCapture stores raw files
+  capture_directory: "/internment"
+  capture_url: "https://capture.openwatch.net/"
+
+Django:
+
+  # OpenWatch API
+  #    Turned into: api_schema + api_user + ':' + api_password + '@' + api_url
+  api_schema: http://
+  api_user: test
+  api_password: test
+  api_url: "localhost:8000/api/"
