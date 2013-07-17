@@ -57,6 +57,7 @@ template app_root + node['ow_media_process']['config_path'] do
     group node['ow_media_process']['service_user_group']
     mode "440"
     variables({
+    :app_domain => node['ow_media_capture']['app_domain'],
     :app_port => node['ow_media_process']['app_port'], 
     :processed_subdir => node['ow_media_process']['processed_subdir'],
     :aws_bucket => node['ow_media_process']['aws_bucket'],
