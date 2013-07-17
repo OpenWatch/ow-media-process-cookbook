@@ -13,7 +13,7 @@ Process:
 Media:
   # Where NodeMediaCapture stores raw files
   capture_directory: "/internment"
-
+  capture_url: "https://capture.openwatch.net/"
 
 Django:
 
