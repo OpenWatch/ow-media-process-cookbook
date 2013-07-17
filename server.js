@@ -175,6 +175,7 @@ jobs.process('thumbnail', 4, function(job, done) {
       source_path = hq_path;
     }
   }
+
   job.log('attempting screeenshot on file: ' + String(source_path));
   var proc = new ffmpeg({ source: source_path })
   .withSize('640x480')
@@ -202,6 +203,21 @@ jobs.process('thumb_upload', 4, function(job, done) {
   var thumb_s3_path = uuid + '/thumb.jpg';
 
   var upload_client = s3client;
+
+  var filePath = 'https://capture.openwatch.net/media/' + uuid + '/processed/thumb.jpg';
+
+
+  callEndpoint('sync_thumbnail', {
+      public_upload_token: up_token,
+      recording_id: uuid,
+      recording_type: 'video',
+      thumb: filePath
+      }, function(error, response, body) {
+        var job = null;
+        var done = null;
+        return processCallEndpointCallback(error, response, body, job, done);
+      }
+    );
 
   s3_exists(upload_client, thumb_s3_path)
   .then(function(exists){
@@ -441,6 +457,8 @@ app.post('/process_hq/:up_token/:uuid', function (req, res) {
       recording_type: 'video',
       path: filePath
       }, function(error, response, body) {
+	var job = null;
+	var done = null;
         return processCallEndpointCallback(error, response, body, job, done);
       }
     );
@@ -560,6 +578,8 @@ function start_upload_thumb_to_s3_job(uuid, up_token) {
 
 function start_upload_hq_to_s3_job(uuid, up_token) {
   console.log('start_upload_hq_to_s3_job');
+  start_thumbnail_job(uuid, up_token);
+  
   var job = jobs.create('hq_upload', {
         title: uuid,
         uuid: uuid,
@@ -569,7 +589,6 @@ function start_upload_hq_to_s3_job(uuid, up_token) {
   job.on('complete', function(){
     console.log("Upload hq complete.");
     start_transcode_job(uuid);
-    start_thumbnail_job(uuid, up_token);
   }).on('failed', function(){
     generateErrorMessage(uuid, up_token, "Upload hq Job failed");
   }).on('progress', function(progress){
@@ -688,6 +707,13 @@ function makeEndpointUrl(endpoint){
 
 function processCallEndpointCallback(error, response, body, job, done) {
   console.log("Call endpoint response");
+
+  if (job === null) {
+     console.log('No job');
+     console.log(error);
+     return;
+  }
+
   if(typeof response == 'undefined'){
     console.log("Could not reach endpoint");
     job.log("Could not reach endpoint");
