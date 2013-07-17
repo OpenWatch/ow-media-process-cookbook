@@ -1,41 +1,68 @@
-NodeMediaProcess
-================
+ow_media_process Cookbook
+=========================
+TODO: Enter the cookbook description here.
 
-Video processing server/queue for Node.js
+e.g.
+This cookbook makes your favorite breakfast sandwhich.
 
-Dependencies
+Requirements
 ------------
+TODO: List your cookbook requirements. Be sure to include any requirements this cookbook has on platforms, libraries, other cookbooks, packages, operating systems, etc.
 
-1. Install ffmpeg, Redis
-2. Start Redis with `redis-server`
-3. All the other stuff in `package.json`, which can be installed with `npm install`.
+e.g.
+#### packages
+- `toaster` - ow_media_process needs toaster to brown your bagel.
 
-Configuration
+Attributes
+----------
+TODO: List you cookbook attributes here.
+
+e.g.
+#### ow_media_process::default
+<table>
+  <tr>
+    <th>Key</th>
+    <th>Type</th>
+    <th>Description</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td><tt>['ow_media_process']['bacon']</tt></td>
+    <td>Boolean</td>
+    <td>whether to include bacon</td>
+    <td><tt>true</tt></td>
+  </tr>
+</table>
+
+Usage
+-----
+#### ow_media_process::default
+TODO: Write usage instructions for each cookbook.
+
+e.g.
+Just include `ow_media_process` in your node's `run_list`:
+
+```json
+{
+  "name":"my_node",
+  "run_list": [
+    "recipe[ow_media_process]"
+  ]
+}
+```
+
+Contributing
 ------------
+TODO: (optional) If this is a public cookbook, detail the process for contributing. If this is a private cookbook, remove this section.
 
-1. Rename `config/default-template.yaml` to `config/default.yaml` and change the values according to your desired configuration.
+e.g.
+1. Fork the repository on Github
+2. Create a named feature branch (like `add_component_x`)
+3. Write you change
+4. Write tests for your change (if applicable)
+5. Run the tests, ensuring they all pass
+6. Submit a Pull Request using Github
 
-
-Job Types
-------------
-
-* `concatenate`
-	* globs *.mp4, converts to .ts, cats them together into full.ts
-* `convert`
-	* converts full.ts to full.mp4
-* `thumbnail`
-	* generates thumb.jpg from full.mp4
-* `thumb_upload`
-	* uploads thumb.jpg to S3 bucket
-* `lq_upload`
-	* uploads full.mp4 to S3 bucket
-* `hq_upload`
-	* uploads hq.mp4 to S3 bucket 
-
-API Endpoints
-------------
-
-* `POST /process_lq/:up_token/:uuid`
-	* Starts concatenate => convert => thumbnail => lq_upload jobs
-* `POST /process_hq/:up_token/:uuid`
-	* Starts hq_upload job
+License and Authors
+-------------------
+Authors: TODO: List authors
